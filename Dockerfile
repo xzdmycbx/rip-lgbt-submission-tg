@@ -27,15 +27,21 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Runtime
 FROM alpine:3.19
-RUN apk add --no-cache chromium ca-certificates tzdata font-noto-cjk dumb-init \
+RUN apk add --no-cache chromium ca-certificates tzdata font-noto-cjk dumb-init su-exec \
  && adduser -D -u 1000 rip
 ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 ENV TZ=Asia/Shanghai
 ENV LISTEN_ADDR=":8080"
 ENV DATA_DIR=/data
+ENV RUN_USER=rip
+
 COPY --from=backend-build /out/server /usr/local/bin/server
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 WORKDIR /data
-USER rip
 EXPOSE 8080
-ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+# Stay as root just long enough for entrypoint.sh to chown /data, then
+# su-exec drops to RUN_USER before the server binary starts.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/usr/local/bin/server"]
