@@ -10,10 +10,11 @@ COPY frontend/ ./
 RUN npm run build
 
 # Backend build (pure-Go sqlite via modernc.org/sqlite)
-FROM golang:1.22-alpine AS backend-build
+FROM golang:1.26-alpine AS backend-build
 RUN apk add --no-cache git
 WORKDIR /src
 ENV GOPROXY=https://goproxy.cn,direct
+ENV GOTOOLCHAIN=auto
 COPY backend/go.mod backend/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY backend/ ./
