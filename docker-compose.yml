@@ -1,0 +1,31 @@
+services:
+  rip-lgbt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rip-lgbt:latest
+    container_name: rip-lgbt
+    restart: unless-stopped
+    environment:
+      SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-admin}
+      SUPERADMIN_PASSWORD_FILE: /run/secrets/superadmin_password
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
+      LISTEN_ADDR: ":8080"
+      DATA_DIR: /data
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    secrets:
+      - superadmin_password
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+secrets:
+  superadmin_password:
+    file: ./.secrets/superadmin_password

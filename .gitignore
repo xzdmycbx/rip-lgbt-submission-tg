@@ -1,0 +1,26 @@
+.idea/
+.claude/
+
+# Local data (SQLite, uploads, generated secrets)
+/data/
+/.secrets/
+
+# Frontend build artifacts
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# Backend build artifacts
+/backend/bin/
+/backend/server
+/backend/server.exe
+/backend/internal/http/static/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+
+# Env
+.env
+.env.local
