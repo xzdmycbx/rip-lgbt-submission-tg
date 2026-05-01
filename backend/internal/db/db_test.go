@@ -65,8 +65,11 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := d2.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("expected 1 migration recorded, got %d", count)
+	// We currently ship 2 migrations; bump this when adding more. The
+	// invariant under test is that running Open twice does not duplicate
+	// any of them.
+	if count != 2 {
+		t.Fatalf("expected 2 migrations recorded, got %d", count)
 	}
 }
 

@@ -124,6 +124,60 @@ export const authAPI = {
       .then((r) => r.data)
 };
 
+export interface UploadCategory {
+  role: string;
+  title: string;
+  multiple: boolean;
+}
+
+export interface UploadAsset {
+  id: number;
+  role: string;
+  filename: string;
+  url: string;
+  size: number;
+}
+
+export interface UploadStateResponse {
+  draft: {
+    id: string;
+    display_name: string;
+    description: string;
+    entry_id: string;
+    current_step: string;
+    status: string;
+  };
+  profile: {
+    name: string;
+    desc: string;
+    departure: string;
+    profileUrl: string;
+    facts: { label: string; value: string }[];
+    contentHtml: string;
+  };
+  categories: UploadCategory[];
+  assets: UploadAsset[];
+}
+
+export const uploadAPI = {
+  state: (token: string) =>
+    api
+      .get<UploadStateResponse>(`/api/uploads/${encodeURIComponent(token)}/state`)
+      .then((r) => r.data),
+  upload: (token: string, role: string, file: File) => {
+    const fd = new FormData();
+    fd.append('role', role);
+    fd.append('file', file);
+    return api
+      .post<{ ok: boolean; asset: UploadAsset }>(`/api/uploads/${encodeURIComponent(token)}/file`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      .then((r) => r.data);
+  },
+  remove: (token: string, assetID: number) =>
+    api.delete(`/api/uploads/${encodeURIComponent(token)}/file/${assetID}`).then((r) => r.data)
+};
+
 export interface SettingsState {
   bot_token?: string;
   bot_token_set?: string;

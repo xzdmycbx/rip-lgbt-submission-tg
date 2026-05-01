@@ -16,14 +16,14 @@
         <div class="field"><span class="label">显示名</span><input v-model="form.display_name" placeholder="显示在后台" /></div>
         <div class="field"><span class="label">初始密码（可选）</span><input v-model="form.password" type="password" autocomplete="new-password" /></div>
       </div>
-      <label class="switch" style="margin-top: 6px;">
+      <label class="switch section-h3">
         <input type="checkbox" v-model="form.is_super" />
         <span>授予超级管理员权限</span>
       </label>
-      <div style="margin-top: 14px;">
+      <div class="form-actions">
         <button class="button primary" type="button" @click="create" :disabled="busy">添加</button>
+        <span v-if="status" class="status-line" :class="statusTone">{{ status }}</span>
       </div>
-      <p v-if="status" class="status-line" :class="statusTone">{{ status }}</p>
     </div>
 
     <div class="card">
@@ -37,7 +37,7 @@
             <td><code>#{{ a.id }}</code></td>
             <td>
               {{ a.display_name || a.username || `tg:${a.telegram_id}` }}
-              <span v-if="a.is_super" class="badge info" style="margin-left:6px;">超管</span>
+              <span v-if="a.is_super" class="badge info">超管</span>
             </td>
             <td>
               <span v-if="a.username" class="badge muted">密码: {{ a.username }}</span>
@@ -56,7 +56,7 @@
         </tbody>
       </table>
 
-      <div v-if="lastLink" class="card tight" style="margin-top: 12px;">
+      <div v-if="lastLink" class="card tight section-h3">
         <h3>新生成的临时登录链接</h3>
         <p class="card-subtitle">10 分钟内有效，只能使用一次。</p>
         <input :value="lastLink" readonly @focus="($event.target as HTMLInputElement).select()" />

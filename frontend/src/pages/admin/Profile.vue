@@ -88,7 +88,7 @@
 
       <template v-if="totpConfirmed">
         <span class="badge ok">✓ 已绑定</span>
-        <div class="field" style="max-width: 240px; margin-top: 14px;">
+        <div class="field totp-disable-field">
           <span class="label">解绑前请输入当前验证码</span>
           <input v-model="disableCode" maxlength="6" inputmode="numeric" pattern="\d{6}" placeholder="6 位代码" />
         </div>
@@ -98,7 +98,7 @@
       </template>
 
       <template v-else-if="totpReady">
-        <div class="field-row" style="align-items: stretch;">
+        <div class="field-row stretch">
           <div class="field">
             <span class="label">扫描二维码</span>
             <img v-if="totpQR" :src="totpQR" alt="otpauth qr" class="qr-img" />
@@ -131,7 +131,7 @@
       <h3>Passkey</h3>
       <p class="card-subtitle">无密码登录的安全凭据。同一账号可以同时绑定多个设备。</p>
 
-      <table v-if="passkeys.length" class="data" style="margin-bottom: 14px;">
+      <table v-if="passkeys.length" class="data passkey-table">
         <thead><tr><th>ID</th><th>传输方式</th><th>注册时间</th><th></th></tr></thead>
         <tbody>
           <tr v-for="p in passkeys" :key="p.id">
@@ -144,7 +144,7 @@
           </tr>
         </tbody>
       </table>
-      <p v-else class="empty-state" style="text-align: left; padding: 0 0 8px;">尚未绑定任何 Passkey。</p>
+      <p v-else class="empty-state passkey-empty">尚未绑定任何 Passkey。</p>
 
       <div class="form-actions">
         <button class="button primary" type="button" @click="addPasskey" :disabled="busy">+ 添加 Passkey</button>
@@ -391,4 +391,15 @@ function setPasskey(t: string, tone: 'ok' | 'error') {
 
 <style scoped>
 /* Profile-specific tweaks. Generic helpers live in admin.css. */
+.totp-disable-field {
+  max-width: 240px;
+  margin-top: 14px;
+}
+.passkey-table {
+  margin-bottom: 14px;
+}
+.passkey-empty {
+  text-align: left;
+  padding: 0 0 8px;
+}
 </style>

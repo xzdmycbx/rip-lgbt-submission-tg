@@ -45,13 +45,13 @@
         </div>
       </template>
 
-      <h3 style="margin-top: 22px;">站点</h3>
+      <h3 class="section-h3">站点</h3>
       <div class="field">
         <span class="label">站点显示名</span>
         <input v-model="form.site_name" placeholder="勿忘我" />
       </div>
 
-      <div style="margin-top: 18px; display: flex; align-items: center; gap: 12px;">
+      <div class="form-actions">
         <button class="button primary" type="submit" :disabled="busy">保存并重载机器人</button>
         <span v-if="status" class="status-line" :class="statusTone">{{ status }}</span>
       </div>

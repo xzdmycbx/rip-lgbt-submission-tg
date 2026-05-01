@@ -281,12 +281,16 @@
   line-height: 1.5;
 }
 
+.admin-app input:not([type]),
 .admin-app input[type="text"],
 .admin-app input[type="password"],
 .admin-app input[type="email"],
 .admin-app input[type="number"],
 .admin-app input[type="search"],
 .admin-app input[type="url"],
+.admin-app input[type="tel"],
+.admin-app input[type="date"],
+.admin-app input[type="datetime-local"],
 .admin-app textarea,
 .admin-app select {
   width: 100%;
@@ -302,6 +306,18 @@
   box-shadow: var(--shadow-xs);
 }
 
+.admin-app input:not([type]):disabled,
+.admin-app input[type="text"]:disabled,
+.admin-app input[type="password"]:disabled,
+.admin-app input[type="number"]:disabled,
+.admin-app input[type="search"]:disabled,
+.admin-app textarea:disabled,
+.admin-app select:disabled {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .admin-app textarea {
   min-height: 92px;
   resize: vertical;
@@ -309,7 +325,15 @@
   font-family: inherit;
 }
 
-.admin-app input:focus,
+.admin-app input:not([type]):focus,
+.admin-app input[type="text"]:focus,
+.admin-app input[type="password"]:focus,
+.admin-app input[type="email"]:focus,
+.admin-app input[type="number"]:focus,
+.admin-app input[type="search"]:focus,
+.admin-app input[type="url"]:focus,
+.admin-app input[type="tel"]:focus,
+.admin-app input[type="date"]:focus,
 .admin-app textarea:focus,
 .admin-app select:focus {
   border-color: #94a3b8;
@@ -622,6 +646,15 @@
   border-radius: 10px;
 }
 
+.admin-login-card .factor-card .factor-title {
+  font-weight: 600;
+}
+
+.admin-login-card .factor-card .factor-hint {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
 /* Memorial / draft preview iframe wrapper */
 
 .review-grid {
@@ -790,12 +823,43 @@
     flex-wrap: wrap;
     margin-top: 0;
     flex: 1;
+    gap: 4px;
   }
+  .admin-sidebar nav .section-label { display: none; }
   .admin-sidebar .footer-actions { margin-left: auto; margin-top: 0; }
   .admin-sidebar .who { display: none; }
-  .admin-main { padding: 22px 16px 56px; }
+  .admin-main { padding: 22px 16px 56px; max-width: none; }
   .review-grid { grid-template-columns: 1fr; }
   .review-grid .preview-frame { height: 60vh; min-height: 0; }
+  .field-row { grid-template-columns: 1fr; }
+  .page-head { flex-direction: column; align-items: flex-start; }
+  .page-head .actions { width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .admin-sidebar { flex-wrap: wrap; }
+  .admin-sidebar .brand { width: 100%; padding: 0 4px 8px; border-bottom: 1px solid var(--border); }
+  .admin-sidebar nav { flex: 0 0 100%; gap: 2px; padding-top: 6px; }
+  .admin-sidebar nav a {
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
+    padding: 8px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+  }
+  .admin-sidebar nav a.router-link-active { background: var(--accent-soft); }
+  .admin-sidebar .footer-actions { width: 100%; padding-top: 6px; }
+  .admin-sidebar .footer-actions .button { width: 100%; }
+  .admin-main { padding: 16px 12px 56px; }
+  .admin-app table.data { font-size: 12.5px; }
+  .admin-app table.data th, .admin-app table.data td { padding: 8px 10px; }
+  .admin-app .button.sm { padding: 0 8px; font-size: 12px; min-height: 28px; }
+  .admin-login-card { padding: 24px 20px; }
+  .admin-login-card h1 { font-size: 20px; }
+  .review-grid .preview-frame { height: 50vh; }
+  .review-grid .image-grid { grid-template-columns: repeat(2, 1fr); }
+  .draft-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .field-row.stretch > * { width: 100%; }
 }
 
 /* Form actions row (Save / Cancel / status message) */
@@ -851,4 +915,54 @@
 
 .card.tablecard table.data {
   margin-bottom: 0;
+}
+
+/* Generic spacing helpers — used to absorb tiny inline styles. */
+.section-h3 { margin-top: 18px; }
+.section-h3:first-child { margin-top: 0; }
+
+.button-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button-row.spaced { gap: 12px; }
+
+.field-row.stretch { align-items: stretch; }
+
+.subtitle-mini {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.markdown-dump-block {
+  margin-top: 4px;
+}
+
+.card-summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Sidebar mini-meta */
+
+.admin-sidebar .badge {
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Login pages dual layout (button row inside login card) */
+.admin-login-card .button-row .button { flex: 1; min-width: 0; }
+.admin-login-card .button-row .button.ghost { flex: 0 0 auto; }
+
+.reject-dialog {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
 }

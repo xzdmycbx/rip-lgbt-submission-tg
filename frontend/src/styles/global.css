@@ -1,6 +1,12 @@
 /* Full memorial site stylesheet ported from the original CF Workers
  * baseStyles() (frontend.js lines 1414-3242). Keep selectors stable so
- * the Vue components map cleanly to the original look. */
+ * the Vue components map cleanly to the original look.
+ *
+ * Theme variables live on :root and switch via [data-theme="light"].
+ * The dark theme is the default historic look; the light theme keeps
+ * the same layout but swaps base colors for clean white. The admin app
+ * scopes its own variables in admin.css so it is unaffected by the
+ * theme attribute. */
 
 :root {
   color-scheme: dark;
@@ -24,6 +30,89 @@
   --radius: 8px;
   --serif: Georgia, 'Noto Serif SC', 'Songti SC', STSong, serif;
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Surfaces / backgrounds split out as variables so the light theme
+   * can remap them. */
+  --site-bg-1: linear-gradient(140deg, rgba(91, 206, 250, .13) 0%, transparent 24%);
+  --site-bg-2: linear-gradient(220deg, rgba(245, 169, 184, .14) 0%, transparent 30%);
+  --site-bg-3: linear-gradient(180deg, #030407 0%, #0a0b12 46%, #0b0710 76%, #050509 100%);
+  --grid-line: rgba(251, 247, 255, .045);
+  --grid-tint: linear-gradient(130deg, transparent 0%, rgba(91, 206, 250, .07) 49%, rgba(245, 169, 184, .07) 51%, transparent 100%);
+
+  --header-bg: linear-gradient(180deg, rgba(10, 10, 18, .88), rgba(5, 5, 9, .68));
+  --header-border: rgba(255, 255, 255, .09);
+
+  --card-fill: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .035));
+  --card-border: rgba(255, 255, 255, .16);
+  --card-shadow: 0 24px 80px rgba(0, 0, 0, .28);
+  --card-inset: inset 0 1px 0 rgba(255, 255, 255, .06);
+
+  --input-bg: rgba(255, 255, 255, .07);
+  --input-border: rgba(251, 247, 255, .24);
+  --input-focus-ring: rgba(91, 206, 250, .16);
+
+  --quote-fill: linear-gradient(90deg, rgba(245, 169, 184, .08), transparent);
+  --story-color: var(--ink);
+  --story-quote-color: #ded6e5;
+  --story-code-bg: rgba(255, 255, 255, .08);
+
+  --comment-item-bg: rgba(5, 5, 9, .34);
+  --comment-content-color: #eee8f4;
+
+  --care-bg: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .035));
+  --selection-bg: color-mix(in srgb, var(--blue) 55%, var(--pink));
+  --selection-fg: #050509;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --paper: #fbfaf6;
+  --paper-2: #ffffff;
+  --ink: #1c1f26;
+  --muted: #5a5666;
+  --faint: #8a8696;
+  --line: rgba(28, 31, 38, .10);
+  --line-strong: rgba(28, 31, 38, .22);
+  --petal: #d36983;
+  --petal-dark: #b94f6b;
+  --pink: #ec88a3;
+  --blue: #2a9bd6;
+  --leaf: #5fa769;
+  --leaf-dark: #2f6a3c;
+  --soil: #6c4b37;
+  --rose: #d36983;
+  --card: rgba(255, 255, 255, .92);
+  --shadow: 0 18px 60px rgba(28, 31, 38, .08);
+
+  --site-bg-1: linear-gradient(140deg, rgba(42, 155, 214, .07) 0%, transparent 26%);
+  --site-bg-2: linear-gradient(220deg, rgba(211, 105, 131, .08) 0%, transparent 30%);
+  --site-bg-3: linear-gradient(180deg, #fbfaf6 0%, #f4f1ec 56%, #efe9df 100%);
+  --grid-line: rgba(28, 31, 38, .055);
+  --grid-tint: linear-gradient(130deg, transparent 0%, rgba(42, 155, 214, .04) 49%, rgba(211, 105, 131, .04) 51%, transparent 100%);
+
+  --header-bg: linear-gradient(180deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .78));
+  --header-border: rgba(28, 31, 38, .08);
+
+  --card-fill: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(255, 255, 255, .92));
+  --card-border: rgba(28, 31, 38, .08);
+  --card-shadow: 0 16px 48px rgba(28, 31, 38, .07);
+  --card-inset: inset 0 1px 0 rgba(255, 255, 255, .8);
+
+  --input-bg: #ffffff;
+  --input-border: rgba(28, 31, 38, .18);
+  --input-focus-ring: rgba(42, 155, 214, .14);
+
+  --quote-fill: linear-gradient(90deg, rgba(211, 105, 131, .08), transparent);
+  --story-color: #2b2731;
+  --story-quote-color: #4f4856;
+  --story-code-bg: #f1ede7;
+
+  --comment-item-bg: #ffffff;
+  --comment-content-color: #2b2731;
+
+  --care-bg: linear-gradient(180deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .76));
+  --selection-bg: color-mix(in srgb, var(--blue) 35%, var(--pink) 35%);
+  --selection-fg: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -38,11 +127,8 @@ body {
   min-height: 100vh;
   color: var(--ink);
   font-family: var(--sans);
-  background:
-    linear-gradient(140deg, rgba(91, 206, 250, .13) 0%, transparent 24%),
-    linear-gradient(220deg, rgba(245, 169, 184, .14) 0%, transparent 30%),
-    linear-gradient(180deg, #030407 0%, #0a0b12 46%, #0b0710 76%, #050509 100%),
-    var(--paper);
+  background: var(--site-bg-1), var(--site-bg-2), var(--site-bg-3), var(--paper);
+  transition: background 220ms ease, color 220ms ease;
 }
 
 body::before {
@@ -52,9 +138,9 @@ body::before {
   pointer-events: none;
   opacity: .22;
   background-image:
-    linear-gradient(rgba(251, 247, 255, .045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(251, 247, 255, .045) 1px, transparent 1px),
-    linear-gradient(130deg, transparent 0%, rgba(91, 206, 250, .07) 49%, rgba(245, 169, 184, .07) 51%, transparent 100%);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    var(--grid-tint);
   background-size: 48px 48px, 48px 48px, 100% 100%;
   mask-image: linear-gradient(to bottom, #000 0%, transparent 78%);
 }
@@ -73,11 +159,10 @@ a {
   justify-content: space-between;
   gap: 1rem;
   padding: .8rem clamp(1rem, 4vw, 3rem);
-  border-bottom: 1px solid rgba(255, 255, 255, .09);
-  background:
-    linear-gradient(180deg, rgba(10, 10, 18, .88), rgba(5, 5, 9, .68));
+  border-bottom: 1px solid var(--header-border);
+  background: var(--header-bg);
   backdrop-filter: blur(18px);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .06);
+  box-shadow: 0 1px 0 var(--header-border);
 }
 
 .brand {
@@ -272,10 +357,8 @@ h1, h2, h3 {
   gap: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .035));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .06),
-    0 24px 80px rgba(0, 0, 0, .28);
+  background: var(--card-fill);
+  box-shadow: var(--card-inset), var(--card-shadow);
   backdrop-filter: blur(22px);
 }
 
@@ -307,7 +390,7 @@ h1, h2, h3 {
   padding: 1rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .035));
+  background: var(--care-bg);
   box-shadow: var(--shadow);
 }
 
@@ -338,17 +421,17 @@ h1, h2, h3 {
   width: 100%;
   min-height: 2.75rem;
   padding: .7rem .85rem;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--input-border);
   border-radius: var(--radius);
   color: var(--ink);
   font: inherit;
-  background: rgba(255, 255, 255, .07);
+  background: var(--input-bg);
   outline: none;
 }
 
 .search input:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(91, 206, 250, .16);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
 .result-count {
@@ -404,11 +487,9 @@ h1, h2, h3 {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   text-decoration: none;
-  background: rgba(255, 255, 255, .055);
+  background: var(--card-fill);
   backdrop-filter: blur(14px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .06),
-    0 24px 80px rgba(0, 0, 0, .28);
+  box-shadow: var(--card-inset), var(--card-shadow);
   transition: border-color .18s ease, transform .18s ease, background .18s ease;
 }
 
@@ -577,10 +658,8 @@ h1, h2, h3 {
 .profile-section {
   padding: 2rem 0;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .035));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .06),
-    0 24px 80px rgba(0, 0, 0, .28);
+  background: var(--card-fill);
+  box-shadow: var(--card-inset), var(--card-shadow);
 }
 
 .profile-section h2 {
@@ -599,7 +678,7 @@ h1, h2, h3 {
 
 .story {
   max-width: 780px;
-  color: var(--ink);
+  color: var(--story-color);
   font-size: 1rem;
   line-height: 2.05;
   text-wrap: pretty;
@@ -624,8 +703,8 @@ h1, h2, h3 {
   margin: 1.4rem 0;
   padding: .15rem 0 .15rem 1.1rem;
   border-left: 3px solid var(--rose);
-  color: #ded6e5;
-  background: linear-gradient(90deg, rgba(245, 169, 184, .08), transparent);
+  color: var(--story-quote-color);
+  background: var(--quote-fill);
 }
 
 .story blockquote p { margin: .7rem 0; }
@@ -639,7 +718,7 @@ h1, h2, h3 {
   padding: .12rem .3rem;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: rgba(255, 255, 255, .08);
+  background: var(--story-code-bg);
 }
 
 .story-html-heading.story-align-center,
@@ -973,7 +1052,7 @@ h1, h2, h3 {
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .035));
+  background: var(--card-fill);
   box-shadow: var(--shadow);
 }
 
@@ -993,20 +1072,20 @@ h1, h2, h3 {
 .comment-form textarea {
   width: 100%;
   padding: .75rem .85rem;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--input-border);
   border-radius: var(--radius);
   color: var(--ink);
   font: inherit;
   outline: none;
   resize: vertical;
-  background: rgba(255, 255, 255, .07);
+  background: var(--input-bg);
 }
 
 .comment-form input:focus,
 .comment-form textarea:focus,
 .search input:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(91, 206, 250, .16);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
 .hp-field {
@@ -1054,9 +1133,9 @@ h1, h2, h3 {
 
 .comment-item {
   padding: .85rem;
-  border: 1px solid rgba(255, 255, 255, .1);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(5, 5, 9, .34);
+  background: var(--comment-item-bg);
 }
 
 .comment-meta {
@@ -1072,7 +1151,7 @@ h1, h2, h3 {
 
 .comment-content {
   margin: .55rem 0 0;
-  color: #eee8f4;
+  color: var(--comment-content-color);
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1116,8 +1195,8 @@ h1, h2, h3 {
 }
 
 ::selection {
-  color: #050509;
-  background: color-mix(in srgb, var(--blue) 55%, var(--pink));
+  color: var(--selection-fg);
+  background: var(--selection-bg);
 }
 
 /* Site footer with sprout flourish */

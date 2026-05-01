@@ -32,12 +32,12 @@
             </button>
           </div>
 
-          <div v-if="rejectDialog" style="margin-top: 12px;">
+          <div v-if="rejectDialog" class="reject-dialog">
             <label class="field">
               <span class="label">拒绝原因（会发给投稿者）</span>
               <textarea v-model="rejectReason" rows="3" placeholder="请说明原因"></textarea>
             </label>
-            <div style="display:flex; gap:8px;">
+            <div class="button-row">
               <button class="button" type="button" @click="rejectDialog=false">取消</button>
               <button class="button danger" type="button" @click="reject" :disabled="busy || !rejectReason.trim()">确认拒绝</button>
             </div>

@@ -155,14 +155,33 @@ func (s *Store) Save(ctx context.Context, d *Draft) error {
 		d.Status, d.CurrentStep, string(payloadJSON), d.RejectionReason, d.RevisingSection, appdb.Now(),
 		d.ID,
 	)
+	if err == nil {
+		// Tokens stay valid only while the draft is actively being
+		// edited. Once it moves into review / accepted / rejected we
+		// pre-emptively revoke any outstanding upload links.
+		switch d.Status {
+		case StatusReview, StatusAccepted, StatusRejected:
+			_ = s.RevokeUploadTokens(ctx, d.ID)
+		}
+	}
+	return err
+}
+
+// RevokeUploadTokens marks every active token for a draft as revoked.
+func (s *Store) RevokeUploadTokens(ctx context.Context, draftID string) error {
+	_, err := s.DB.ExecContext(ctx,
+		`UPDATE draft_upload_tokens SET revoked_at = ? WHERE draft_id = ? AND revoked_at IS NULL`,
+		appdb.Now(), draftID)
 	return err
 }
 
 // SoftDelete marks a draft as deleted.
 func (s *Store) SoftDelete(ctx context.Context, id string) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE drafts SET deleted_at = ?, updated_at = ? WHERE id = ?`,
-		appdb.Now(), appdb.Now(), id)
-	return err
+	if _, err := s.DB.ExecContext(ctx, `UPDATE drafts SET deleted_at = ?, updated_at = ? WHERE id = ?`,
+		appdb.Now(), appdb.Now(), id); err != nil {
+		return err
+	}
+	return s.RevokeUploadTokens(ctx, id)
 }
 
 // PurgeOlderThan permanently deletes drafts soft-deleted before cutoff.

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/PaulSonOfLars/gotgbot/v2"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
@@ -28,6 +29,7 @@ type Manager struct {
 	authStore   *auth.Store
 	authService *auth.Service
 	preview     PreviewCapturer
+	uploadAPI   UploadIssuer
 	siteURL     string
 	internalURL string
 	webhookPath string
@@ -43,6 +45,12 @@ type Manager struct {
 // PreviewCapturer renders a draft preview to PNG.
 type PreviewCapturer interface {
 	CaptureDraft(ctx context.Context, internalBaseURL, draftID string) ([]byte, error)
+}
+
+// UploadIssuer hands out one-time upload URLs for a draft. Implemented by
+// submission.UploadAPI.
+type UploadIssuer interface {
+	IssueUploadToken(ctx context.Context, draftID string) (token, url string, expires time.Time, err error)
 }
 
 // Config wires the bot dependencies.
@@ -186,6 +194,9 @@ func (m *Manager) Notify(chatID int64, text string) error {
 	_, err := bot.SendMessage(chatID, text, nil)
 	return err
 }
+
+// SetUploadAPI plugs in the upload-token issuer after construction.
+func (m *Manager) SetUploadAPI(u UploadIssuer) { m.uploadAPI = u }
 
 // SiteURL returns the configured site URL (used for login link prefixes).
 func (m *Manager) SiteURL() string { return strings.TrimRight(m.siteURL, "/") }

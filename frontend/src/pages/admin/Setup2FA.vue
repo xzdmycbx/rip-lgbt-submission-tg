@@ -19,11 +19,11 @@
         <button v-else class="button" type="button" @click="startTOTP" :disabled="busy">生成绑定二维码</button>
       </template>
       <template v-else>
-        <div class="field-row" style="align-items: stretch;">
+        <div class="field-row stretch">
           <div>
             <p class="field-hint">用 App 扫描这个二维码：</p>
             <img v-if="totp.qr" :src="totp.qr" alt="otpauth qr" class="qr-img" />
-            <p class="field-hint" style="margin-top:6px;">或手动输入密钥：</p>
+            <p class="field-hint section-h3">或手动输入密钥：</p>
             <code class="totp-secret">{{ totp.secret }}</code>
           </div>
           <div>
@@ -42,7 +42,7 @@
       <p class="card-subtitle">通过设备 / 浏览器内置的 WebAuthn 进行无密码登录。</p>
       <span v-if="hasPasskey" class="badge ok">✓ 已绑定 {{ passkeyCount }} 个 Passkey</span>
       <span v-else class="badge muted">尚未绑定</span>
-      <div style="margin-top: 12px;">
+      <div class="form-actions">
         <button class="button" type="button" @click="startPasskey" :disabled="busy">添加 Passkey</button>
       </div>
     </div>

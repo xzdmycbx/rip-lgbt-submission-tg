@@ -137,6 +137,12 @@ func (a *AdminService) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bad_request"})
 		return
 	}
+	// Always re-derive markdown_full / facts / websites from the
+	// structured fields so admins cannot drift them apart by hand.
+	req.MarkdownFull = GenerateMarkdown(&req)
+	req.Facts = GenerateFacts(&req)
+	req.Websites = GenerateWebsites(req.LinksMD)
+
 	cw, _ := json.Marshal(req.ContentWarnings)
 	facts, _ := json.Marshal(req.Facts)
 	sites, _ := json.Marshal(req.Websites)
@@ -163,7 +169,12 @@ func (a *AdminService) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not_found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":            true,
+		"markdown_full": req.MarkdownFull,
+		"facts":         req.Facts,
+		"websites":      req.Websites,
+	})
 }
 
 func (a *AdminService) handleDelete(w http.ResponseWriter, r *http.Request) {

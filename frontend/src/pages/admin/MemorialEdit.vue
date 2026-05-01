@@ -3,7 +3,7 @@
     <div class="page-head">
       <div>
         <h2 class="page-title">编辑稿件 · {{ id }}</h2>
-        <p class="page-subtitle">字段直接对应数据库列；保存即立刻在公开页生效。</p>
+        <p class="page-subtitle">字段保存后会自动生成 markdown 与 facts，无需手改。</p>
       </div>
       <div class="actions">
         <RouterLink class="button ghost" to="/admin/memorials">← 返回列表</RouterLink>
@@ -15,16 +15,16 @@
     <form v-else class="card" @submit.prevent="save">
       <h3>基础信息</h3>
       <div class="field-row">
-        <div class="field"><span class="label">展示名</span><input v-model="memorial.display_name" required /></div>
-        <div class="field"><span class="label">头像 URL</span><input v-model="memorial.avatar_url" placeholder="/media/memorials/xxx.jpg" /></div>
-        <div class="field"><span class="label">一句话简介</span><input v-model="memorial.description" /></div>
-        <div class="field"><span class="label">地区</span><input v-model="memorial.location" /></div>
-        <div class="field"><span class="label">出生日期</span><input v-model="memorial.birth_date" /></div>
-        <div class="field"><span class="label">逝世日期</span><input v-model="memorial.death_date" /></div>
-        <div class="field"><span class="label">昵称</span><input v-model="memorial.alias" /></div>
-        <div class="field"><span class="label">年龄</span><input v-model="memorial.age" /></div>
-        <div class="field"><span class="label">身份表述</span><input v-model="memorial.identity" /></div>
-        <div class="field"><span class="label">代词</span><input v-model="memorial.pronouns" /></div>
+        <div class="field"><span class="label">展示名</span><input type="text" v-model="memorial.display_name" required /></div>
+        <div class="field"><span class="label">头像 URL</span><input type="text" v-model="memorial.avatar_url" placeholder="/media/memorials/xxx.jpg" /></div>
+        <div class="field"><span class="label">一句话简介</span><input type="text" v-model="memorial.description" /></div>
+        <div class="field"><span class="label">地区</span><input type="text" v-model="memorial.location" /></div>
+        <div class="field"><span class="label">出生日期</span><input type="text" v-model="memorial.birth_date" /></div>
+        <div class="field"><span class="label">逝世日期</span><input type="text" v-model="memorial.death_date" /></div>
+        <div class="field"><span class="label">昵称</span><input type="text" v-model="memorial.alias" /></div>
+        <div class="field"><span class="label">年龄</span><input type="text" v-model="memorial.age" /></div>
+        <div class="field"><span class="label">身份表述</span><input type="text" v-model="memorial.identity" /></div>
+        <div class="field"><span class="label">代词</span><input type="text" v-model="memorial.pronouns" /></div>
         <div class="field">
           <span class="label">状态</span>
           <select v-model="memorial.status">
@@ -34,31 +34,39 @@
         </div>
       </div>
 
-      <h3 style="margin-top: 18px;">正文章节</h3>
+      <h3 class="section-h3">正文章节</h3>
       <div class="field"><span class="label">简介</span><textarea v-model="memorial.intro" rows="4"></textarea></div>
       <div class="field"><span class="label">生平与记忆</span><textarea v-model="memorial.life" rows="6"></textarea></div>
       <div class="field"><span class="label">离世</span><textarea v-model="memorial.death" rows="4"></textarea></div>
       <div class="field"><span class="label">念想</span><textarea v-model="memorial.remembrance" rows="6"></textarea></div>
 
-      <h3 style="margin-top: 18px;">附加内容</h3>
+      <h3 class="section-h3">附加内容</h3>
       <div class="field"><span class="label">公开链接（每行一个，如 “twitter: https://...”）</span><textarea v-model="memorial.links_md" rows="3"></textarea></div>
       <div class="field"><span class="label">作品（每行一项）</span><textarea v-model="memorial.works_md" rows="3"></textarea></div>
       <div class="field"><span class="label">资料来源</span><textarea v-model="memorial.sources_md" rows="2"></textarea></div>
       <div class="field"><span class="label">自选附加项</span><textarea v-model="memorial.custom_md" rows="3"></textarea></div>
 
-      <h3 style="margin-top: 18px;">完整 Markdown</h3>
-      <p class="field-hint">公开页直接渲染这段。如果你单独修改了上面字段，记得同步更新这里。</p>
-      <div class="field"><textarea v-model="memorial.markdown_full" rows="14" style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace;"></textarea></div>
-
-      <div style="margin-top: 18px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <div class="form-actions">
         <button class="button primary" type="submit" :disabled="busy">保存</button>
         <button class="button danger" type="button" @click="hardDelete" :disabled="busy">永久删除</button>
         <span v-if="status" class="status-line" :class="statusTone">{{ status }}</span>
       </div>
     </form>
 
+    <details class="card" v-if="memorial">
+      <summary class="card-summary">查看自动生成的 Markdown 与 Facts JSON</summary>
+      <p class="card-subtitle section-h3">这两项由后端从结构化字段自动生成，仅供查看。下次保存会自动更新。</p>
+      <h4 class="subtitle-mini">MARKDOWN_FULL</h4>
+      <pre class="markdown-dump">{{ memorial.markdown_full }}</pre>
+      <h4 class="subtitle-mini">FACTS_JSON</h4>
+      <pre class="markdown-dump">{{ JSON.stringify(memorial.facts, null, 2) }}</pre>
+      <h4 class="subtitle-mini">WEBSITES_JSON</h4>
+      <pre class="markdown-dump">{{ JSON.stringify(memorial.websites, null, 2) }}</pre>
+    </details>
+
     <div v-if="memorial" class="card">
       <h3>预览</h3>
+      <p class="card-subtitle">和公开页同款渲染。</p>
       <div class="story" v-html="contentHtml"></div>
     </div>
   </AdminLayout>
@@ -93,8 +101,11 @@ async function save() {
   busy.value = true;
   status.value = '';
   try {
-    await adminAPI.updateMemorial(props.id, memorial.value);
-    setStatus('已保存', 'ok');
+    const r: any = await adminAPI.updateMemorial(props.id, memorial.value);
+    if (r?.markdown_full) memorial.value.markdown_full = r.markdown_full;
+    if (r?.facts) memorial.value.facts = r.facts;
+    if (r?.websites) memorial.value.websites = r.websites;
+    setStatus('已保存，markdown 与 facts 已自动同步', 'ok');
     await load();
   } catch (e: any) {
     setStatus(e?.response?.data?.error || '保存失败', 'error');

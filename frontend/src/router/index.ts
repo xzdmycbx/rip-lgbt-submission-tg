@@ -4,6 +4,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: () => import('@/pages/Home.vue') },
   { path: '/memorial/:id', name: 'memorial', component: () => import('@/pages/MemorialDetail.vue'), props: true },
   { path: '/submit', name: 'submit', component: () => import('@/pages/Submit.vue') },
+  { path: '/upload/:token', name: 'upload', component: () => import('@/pages/Upload.vue'), props: true },
   { path: '/admin', redirect: '/admin/queue' },
   { path: '/admin/login', name: 'admin-login', component: () => import('@/pages/admin/Login.vue') },
   { path: '/admin/login/totp', name: 'admin-login-totp', component: () => import('@/pages/admin/LoginTOTP.vue') },

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,11 +13,12 @@ import (
 	"github.com/PaulSonOfLars/gotgbot/v2/ext"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers"
 	"github.com/PaulSonOfLars/gotgbot/v2/ext/handlers/filters/message"
-	"github.com/google/uuid"
-	"os"
 
 	"github.com/ripyc/rip-lgbt-submission-tg/internal/submission"
 )
+
+// Underscore-imported helpers we now route through the upload API.
+var _ = io.EOF
 
 func (m *Manager) registerHandlers(d *ext.Dispatcher) {
 	d.AddHandler(handlers.NewCommand("start", m.handleStart))
@@ -29,6 +28,7 @@ func (m *Manager) registerHandlers(d *ext.Dispatcher) {
 
 	d.AddHandler(handlers.NewCallback(callbackPrefix("step:"), m.handleStepCallback))
 	d.AddHandler(handlers.NewCallback(callbackPrefix("nav:"), m.handleNavCallback))
+	d.AddHandler(handlers.NewCallback(callbackPrefix("upload"), m.handleUploadCallback))
 	d.AddHandler(handlers.NewCallback(callbackPrefix("submit"), m.handleSubmitFinal))
 
 	d.AddHandler(handlers.NewMessage(message.Photo, m.handlePhoto))
@@ -203,8 +203,11 @@ func (m *Manager) handleText(b *gotgbot.Bot, ctx *ext.Context) error {
 	return m.sendStepMessage(b, c, d, next, false)
 }
 
-// --- photo input ---
-
+// handlePhoto used to download photos sent directly to the bot. We now
+// route image uploads exclusively through the web uploader, but we keep
+// this handler so a stray photo gets a friendly redirect instead of
+// being silently ignored. The photo message itself is deleted to keep
+// the chat tidy.
 func (m *Manager) handlePhoto(b *gotgbot.Bot, ctx *ext.Context) error {
 	chat := ctx.EffectiveChat
 	user := ctx.EffectiveUser
@@ -213,38 +216,29 @@ func (m *Manager) handlePhoto(b *gotgbot.Bot, ctx *ext.Context) error {
 		return nil
 	}
 	c := context.Background()
-	d, err := m.drafts.FindOpenByTelegram(c, user.Id)
-	if err != nil || d == nil {
-		_, _ = b.SendMessage(chat.Id, "请先输入 /submit 开始投稿。", nil)
-		return nil
-	}
-	step, _ := submission.FindStep(d.CurrentStep)
-	if step.Kind != submission.StepImage && step.Kind != submission.StepImages {
-		_ = m.sendStepMessage(b, c, d, step, false)
-		return nil
-	}
+	d, _ := m.drafts.FindOpenByTelegram(c, user.Id)
 
-	largest := pickLargestPhoto(msg.Photo)
-	if largest == nil {
-		return nil
-	}
-	if err := m.downloadPhotoToDraft(b, d, step.AssetRole, largest); err != nil {
-		m.logger.Warn("download photo", "err", err)
-		_, _ = b.SendMessage(chat.Id, "图片保存失败，请重试。", nil)
-		return nil
-	}
+	// Always delete the user's photo message so the chat doesn't fill up.
 	if _, err := b.DeleteMessage(chat.Id, msg.MessageId, nil); err != nil {
-		m.logger.Warn("delete user photo", "err", err)
+		m.logger.Warn("delete photo message", "err", err)
 	}
-	if step.Kind == submission.StepImage {
-		// move forward automatically
-		next := submission.NextStep(step.Key)
-		d.CurrentStep = next.Key
-		_ = m.drafts.Save(c, d)
-		return m.sendStepMessage(b, c, d, next, false)
+	if d == nil {
+		_, _ = b.SendMessage(chat.Id, "请先输入 /submit 开始投稿。图片现在统一在网页上上传。", nil)
+		return nil
 	}
-	// images — keep collecting; refresh the step prompt to show count
-	return m.sendStepMessage(b, c, d, step, false)
+	if m.uploadAPI != nil {
+		_, url, expires, err := m.uploadAPI.IssueUploadToken(c, d.ID)
+		if err == nil {
+			mins := int(time.Until(expires).Minutes())
+			_, _ = b.SendMessage(chat.Id, fmt.Sprintf(
+				"📸 图片请在网页上传：\n%s\n\n链接 %d 分钟内有效；上传完成后回到这里点「下一步」。",
+				url, mins), nil)
+			return nil
+		}
+		m.logger.Warn("issue upload token from photo handler", "err", err)
+	}
+	_, _ = b.SendMessage(chat.Id, "图片现在统一在网页上传。请点击当前步骤下方的「📸 在网页上传图片」按钮。", nil)
+	return nil
 }
 
 func pickLargestPhoto(photos []gotgbot.PhotoSize) *gotgbot.PhotoSize {
@@ -255,41 +249,6 @@ func pickLargestPhoto(photos []gotgbot.PhotoSize) *gotgbot.PhotoSize {
 		}
 	}
 	return best
-}
-
-func (m *Manager) downloadPhotoToDraft(b *gotgbot.Bot, d *submission.Draft, role string, p *gotgbot.PhotoSize) error {
-	file, err := b.GetFile(p.FileId, nil)
-	if err != nil {
-		return err
-	}
-	url := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", b.Token, file.FilePath)
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("download status %d", resp.StatusCode)
-	}
-	dir := m.drafts.DraftDir(d.ID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	name := fmt.Sprintf("%s_%s.jpg", role, uuid.NewString()[:8])
-	target := filepath.Join(dir, name)
-	out, err := os.Create(target)
-	if err != nil {
-		return err
-	}
-	n, err := io.Copy(out, resp.Body)
-	out.Close()
-	if err != nil {
-		return err
-	}
-	if _, err := m.drafts.AddAsset(context.Background(), d.ID, role, name, "image/jpeg", n); err != nil {
-		return err
-	}
-	return nil
 }
 
 // --- callbacks ---
@@ -377,6 +336,38 @@ func (m *Manager) handleSubmitFinal(b *gotgbot.Bot, ctx *ext.Context) error {
 	_, _ = b.SendMessage(cq.From.Id,
 		"已提交审核。管理员看到投稿后会给你反馈。如果需要修改某一节，机器人会再次告诉你。", nil)
 	go m.notifyAdminsOfNewDraft(d.ID)
+	return nil
+}
+
+// handleUploadCallback issues a fresh upload-page URL for the user's
+// current draft and DMs it as a separate message (so the main step
+// message remains in place).
+func (m *Manager) handleUploadCallback(b *gotgbot.Bot, ctx *ext.Context) error {
+	cq := ctx.CallbackQuery
+	if cq == nil {
+		return nil
+	}
+	if m.uploadAPI == nil {
+		_, _ = cq.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "上传功能未启用"})
+		return nil
+	}
+	c := context.Background()
+	d, err := m.drafts.FindOpenByTelegram(c, cq.From.Id)
+	if err != nil || d == nil {
+		_, _ = cq.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "请先输入 /submit"})
+		return nil
+	}
+	_, url, expires, err := m.uploadAPI.IssueUploadToken(c, d.ID)
+	if err != nil {
+		m.logger.Warn("issue upload token", "err", err)
+		_, _ = cq.Answer(b, &gotgbot.AnswerCallbackQueryOpts{Text: "生成失败，请稍后再试"})
+		return nil
+	}
+	_, _ = cq.Answer(b, nil)
+	mins := int(time.Until(expires).Minutes())
+	_, _ = b.SendMessage(cq.From.Id, fmt.Sprintf(
+		"📸 在网页上传图片：\n%s\n\n链接 %d 分钟内有效。可以反复打开同一个链接继续上传，上传完直接回到这里点「下一步」。",
+		url, mins), nil)
 	return nil
 }
 
@@ -500,8 +491,6 @@ func stepProgress(key string) string {
 func buildStepKeyboard(d *submission.Draft, step submission.Step) gotgbot.InlineKeyboardMarkup {
 	rows := [][]gotgbot.InlineKeyboardButton{}
 	if step.Kind == submission.StepFinal {
-		// At the review step the user can still freely jump to any
-		// section, then come back here to submit.
 		rows = append(rows, []gotgbot.InlineKeyboardButton{
 			{Text: "📋 跳到任意步骤修改", CallbackData: "nav:menu"},
 		})
@@ -510,6 +499,14 @@ func buildStepKeyboard(d *submission.Draft, step submission.Step) gotgbot.Inline
 			{Text: "✅ 提交审核", CallbackData: "submit"},
 		})
 	} else {
+		// Image steps get a dedicated row to launch the web uploader,
+		// since TG-side photo handling is unreliable for batches and
+		// loses originals.
+		if step.Kind == submission.StepImage || step.Kind == submission.StepImages {
+			rows = append(rows, []gotgbot.InlineKeyboardButton{
+				{Text: "📸 在网页上传图片", CallbackData: "upload"},
+			})
+		}
 		nav := []gotgbot.InlineKeyboardButton{
 			{Text: "◀ 上一步", CallbackData: "nav:prev"},
 			{Text: "下一步 ▶", CallbackData: "nav:next"},

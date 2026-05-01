@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -41,6 +42,7 @@ type App struct {
 	settingStore   *settings.Store
 	drafts         *submission.Store
 	draftAdmin     *submission.AdminService
+	uploadAPI      *submission.UploadAPI
 	botManager     *bot.Manager
 	preview        *preview.Service
 	stopJanitor    func()
@@ -117,6 +119,43 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 	submission.SetMarkdownRenderer(func(md, personPath string) string {
 		return markdown.Render(md, personPath)
 	})
+	// When AcceptDraft promotes a draft to a memorial, generate the
+	// canonical markdown_full / facts / websites the same way the admin
+	// edit form does.
+	submission.SetPublishedShapeGenerator(func(d *submission.Draft, avatar string) submission.PublishedShape {
+		am := &memorial.AdminMemorial{
+			ID:           d.GetString("entry_id"),
+			DisplayName:  d.GetString("display_name"),
+			AvatarURL:    avatar,
+			Description:  d.GetString("description"),
+			Location:     d.GetString("location"),
+			BirthDate:    d.GetString("birth_date"),
+			DeathDate:    d.GetString("death_date"),
+			Alias:        d.GetString("alias"),
+			Age:          d.GetString("age"),
+			Identity:     d.GetString("identity"),
+			Pronouns:     d.GetString("pronouns"),
+			Intro:        d.GetString("intro"),
+			Life:         d.GetString("life"),
+			Death:        d.GetString("death"),
+			Remembrance:  d.GetString("remembrance"),
+			LinksMD:      d.GetString("links"),
+			WorksMD:      d.GetString("works"),
+			SourcesMD:    d.GetString("sources"),
+			CustomMD:     d.GetString("custom"),
+			EffectsMD:    d.GetString("effects"),
+		}
+		md := memorial.GenerateMarkdown(am)
+		facts := memorial.GenerateFacts(am)
+		sites := memorial.GenerateWebsites(am.LinksMD)
+		factsJSON, _ := json.Marshal(facts)
+		sitesJSON, _ := json.Marshal(sites)
+		return submission.PublishedShape{
+			Markdown:     md,
+			FactsJSON:    string(factsJSON),
+			WebsitesJSON: string(sitesJSON),
+		}
+	})
 
 	a := &App{
 		cfg:           cfg,
@@ -130,11 +169,14 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 		adminSvc:      admin.NewService(store, svc, settingsStore),
 		drafts:        drafts,
 		draftAdmin:    submission.NewAdminService(drafts, botMgr),
+		uploadAPI:     submission.NewUploadAPI(drafts, cfg.SiteURL),
 		botManager:    botMgr,
 		preview:       previewSvc,
 	}
 	// Wire bot auto-reload after settings change.
 	a.adminSvc.BotReload = botMgr.Reload
+	// Hand the upload API to the bot so it can issue per-step links.
+	botMgr.SetUploadAPI(a.uploadAPI)
 	a.stopJanitor = startJanitor(logger, store, drafts)
 	a.router = a.buildRouter()
 	return a, nil
@@ -186,6 +228,7 @@ func (a *App) buildRouter() chi.Router {
 			_, _ = w.Write([]byte(`{"ok":true}`))
 		})
 		r.Mount("/auth", a.authService.Routes())
+		r.Mount("/uploads", a.uploadAPI.Routes())
 		r.Route("/admin", func(r chi.Router) {
 			a.adminSvc.Register(r)
 			a.draftAdmin.Register(r)
@@ -201,8 +244,6 @@ func (a *App) buildRouter() chi.Router {
 				})
 		})
 		r.Route("/bot", func(r chi.Router) {
-			// Telegram webhook endpoint. The actual sub-path (e.g. /tg) is
-			// owned by the bot manager so gotgbot can identify the right bot.
 			prefix := "/api/bot/webhook"
 			r.Handle("/webhook/*", a.botManager.WebhookHandler(prefix))
 		})

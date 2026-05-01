@@ -9,8 +9,8 @@
       <div class="factor-card">
         <div class="factor-icon" aria-hidden="true">🔐</div>
         <div>
-          <div style="font-weight:600;">基于 TOTP 的二步验证</div>
-          <div style="color: var(--text-muted); font-size: 12.5px;">在 Authy / 1Password / Google Authenticator 等 App 中查看。</div>
+          <div class="factor-title">基于 TOTP 的二步验证</div>
+          <div class="factor-hint">在 Authy / 1Password / Google Authenticator 等 App 中查看。</div>
         </div>
       </div>
 
@@ -29,9 +29,9 @@
           />
         </div>
         <p v-if="error" class="status-line error">{{ error }}</p>
-        <div style="display:flex; gap:8px;">
-          <button class="button" type="button" @click="back" :disabled="busy">返回</button>
-          <button class="button primary" type="submit" :disabled="busy" style="flex:1;">登录</button>
+        <div class="button-row">
+          <button class="button ghost" type="button" @click="back" :disabled="busy">返回</button>
+          <button class="button primary" type="submit" :disabled="busy">登录</button>
         </div>
       </form>
 
