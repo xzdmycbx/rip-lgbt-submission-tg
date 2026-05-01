@@ -88,11 +88,12 @@ func AcceptDraft(ctx context.Context, store *Store, d *Draft, reviewerID int64) 
 	displayName := d.GetString("display_name")
 	avatar := d.GetString("avatar")
 	if avatar == "" || strings.EqualFold(avatar, "none") {
-		// Try first asset of role 'avatar'.
+		// Use the post-relocation memorial path so avatar_url stays valid
+		// after the draft directory is cleaned up.
 		avatar = ""
 		for _, a := range d.Assets {
 			if a.Role == "avatar" {
-				avatar = "/media/" + a.Path
+				avatar = "/media/memorials/" + entryID + "/" + a.Filename
 				break
 			}
 		}
@@ -187,6 +188,8 @@ func SetPublishedShapeGenerator(fn func(d *Draft, avatar string) PublishedShape)
 
 // relocateDraftAssets moves files from data/uploads/drafts/<id>/ to
 // data/uploads/memorials/<entry_id>/ so they survive draft cleanup.
+// It also populates memorial_assets so published memorials own their assets
+// independently of the draft record.
 func relocateDraftAssets(ctx context.Context, store *Store, d *Draft, entryID string) error {
 	if len(d.Assets) == 0 {
 		return nil
@@ -201,15 +204,29 @@ func relocateDraftAssets(ctx context.Context, store *Store, d *Draft, entryID st
 		return err
 	}
 	for _, a := range d.Assets {
-		fromPath := store.AssetPath(&a)
-		toRel := dstRel + "/" + a.Filename
-		toPath := storeAbs(store, toRel)
-		if err := osRename(fromPath, toPath); err != nil {
-			// On Windows a cross-device rename is unlikely but tolerate it.
-			continue
+		newRel := dstRel + "/" + a.Filename
+		if !strings.HasPrefix(a.Path, "memorials/") {
+			fromPath := store.AssetPath(&a)
+			toPath := storeAbs(store, newRel)
+			if err := osRename(fromPath, toPath); err != nil {
+				continue
+			}
+			_, _ = store.DB.ExecContext(ctx, `UPDATE draft_assets SET path = ? WHERE id = ?`, newRel, a.ID)
 		}
-		_, _ = store.DB.ExecContext(ctx, `UPDATE draft_assets SET path = ? WHERE id = ?`, toRel, a.ID)
+		insertMemorialAsset(ctx, store, entryID, a, newRel)
 	}
 	_ = osRemoveAll(srcDir)
 	return nil
+}
+
+// insertMemorialAsset adds an asset record to memorial_assets (idempotent).
+func insertMemorialAsset(ctx context.Context, store *Store, entryID string, a Asset, path string) {
+	_, _ = store.DB.ExecContext(ctx, `
+		INSERT INTO memorial_assets(memorial_id, role, filename, path, content_type, size, sort)
+		SELECT ?, ?, ?, ?, ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1 FROM memorial_assets WHERE memorial_id = ? AND filename = ?
+		)`,
+		entryID, a.Role, a.Filename, path, a.ContentType, a.Size, a.Sort,
+		entryID, a.Filename)
 }

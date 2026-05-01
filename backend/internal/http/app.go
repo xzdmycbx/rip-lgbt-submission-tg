@@ -177,6 +177,10 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 	a.adminSvc.BotReload = botMgr.Reload
 	// Hand the upload API to the bot so it can issue per-step links.
 	botMgr.SetUploadAPI(a.uploadAPI)
+	// Repair any accepted drafts that were promoted before the asset
+	// relocation fix: move files still under drafts/ and correct avatar_url.
+	submission.MigrateAcceptedDraftAssets(ctx, drafts, logger)
+
 	a.stopJanitor = startJanitor(logger, store, drafts)
 	a.router = a.buildRouter()
 	return a, nil
