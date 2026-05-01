@@ -21,7 +21,7 @@
         <span class="badge">{{ assetsByRole(cat.role).length }} {{ cat.multiple ? '张' : '/ 1 张' }}</span>
       </div>
 
-      <div
+      <label
         class="dropzone"
         :class="{ disabled: !cat.multiple && assetsByRole(cat.role).length >= 1 }"
         @dragover.prevent
@@ -35,13 +35,13 @@
           :disabled="!cat.multiple && assetsByRole(cat.role).length >= 1"
           @change="(e) => onPick(e, cat)"
         />
-        <p class="dz-hint">
+        <span class="dz-hint">
           点击或拖拽图片到这里
           <span v-if="!cat.multiple">（仅 1 张，再次上传会替换）</span>
           <span v-else>（可多选）</span>
-        </p>
-        <p class="dz-progress" v-if="uploading[cat.role]">上传中… {{ uploading[cat.role] }}</p>
-      </div>
+        </span>
+        <span class="dz-progress" v-if="uploading[cat.role]">上传中… {{ uploading[cat.role] }}</span>
+      </label>
 
       <div v-if="assetsByRole(cat.role).length" class="thumb-grid">
         <figure v-for="a in assetsByRole(cat.role)" :key="a.id" class="thumb">

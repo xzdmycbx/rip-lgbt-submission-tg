@@ -132,7 +132,7 @@
 }
 
 .dropzone {
-  position: relative;
+  display: block;
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface-2);
@@ -140,7 +140,6 @@
   text-align: center;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
-  overflow: hidden;
 }
 
 .dropzone:hover {
@@ -151,28 +150,26 @@
 .dropzone.disabled {
   opacity: 0.55;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .dz-input {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 0;
+  height: 0;
+  overflow: hidden;
   opacity: 0;
-  cursor: pointer;
-}
-
-.dz-input:disabled {
-  pointer-events: none;
 }
 
 .dz-hint {
+  display: block;
   margin: 0;
   color: var(--text-muted);
   font-size: 13.5px;
 }
 
 .dz-progress {
+  display: block;
   margin: 6px 0 0;
   font-size: 12.5px;
   color: var(--text);
