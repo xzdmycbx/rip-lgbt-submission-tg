@@ -153,6 +153,56 @@ func (s *Store) UpdateAdminPassword(ctx context.Context, adminID int64, hash str
 	return err
 }
 
+// UpdateAdminProfile mutates the editable profile fields for an admin.
+// Empty pointers leave the column untouched. The caller is responsible
+// for enforcing field-level rules (e.g. "username only when empty").
+func (s *Store) UpdateAdminProfile(ctx context.Context, adminID int64, displayName, username *string, telegramID *int64) error {
+	cols := []string{}
+	args := []any{}
+	if displayName != nil {
+		cols = append(cols, "display_name = ?")
+		args = append(args, strings.TrimSpace(*displayName))
+	}
+	if username != nil {
+		v := SanitizeUsername(*username)
+		if v == "" {
+			cols = append(cols, "username = NULL")
+		} else {
+			cols = append(cols, "username = ?")
+			args = append(args, v)
+		}
+	}
+	if telegramID != nil {
+		if *telegramID == 0 {
+			cols = append(cols, "telegram_id = NULL")
+		} else {
+			cols = append(cols, "telegram_id = ?")
+			args = append(args, *telegramID)
+		}
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	cols = append(cols, "updated_at = ?")
+	args = append(args, appdb.Now(), adminID)
+	q := "UPDATE admins SET " + strings.Join(cols, ", ") + " WHERE id = ?"
+	_, err := s.DB.ExecContext(ctx, q, args...)
+	if err != nil {
+		// SQLite uniqueness violations come back as "constraint failed".
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			if username != nil && strings.Contains(err.Error(), "username") {
+				return errors.New("username_taken")
+			}
+			if telegramID != nil && strings.Contains(err.Error(), "telegram_id") {
+				return errors.New("telegram_id_taken")
+			}
+			return errors.New("conflict")
+		}
+		return err
+	}
+	return nil
+}
+
 // UpdateAdminTOTP saves an unconfirmed TOTP secret.
 func (s *Store) UpdateAdminTOTP(ctx context.Context, adminID int64, secret string) error {
 	_, err := s.DB.ExecContext(ctx, `UPDATE admins SET totp_secret = ?, totp_confirmed = 0, updated_at = ? WHERE id = ?`,
@@ -167,11 +217,56 @@ func (s *Store) ConfirmAdminTOTP(ctx context.Context, adminID int64) error {
 	return err
 }
 
+// DisableAdminTOTP clears the totp secret + confirmed flag.
+func (s *Store) DisableAdminTOTP(ctx context.Context, adminID int64) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE admins SET totp_secret = NULL, totp_confirmed = 0, updated_at = ? WHERE id = ?`,
+		appdb.Now(), adminID)
+	return err
+}
+
 // ClearMustSetup2FA is used after a successful 2FA bind.
 func (s *Store) ClearMustSetup2FA(ctx context.Context, adminID int64) error {
 	_, err := s.DB.ExecContext(ctx, `UPDATE admins SET must_setup_2fa = 0, updated_at = ? WHERE id = ?`,
 		appdb.Now(), adminID)
 	return err
+}
+
+// ListAdminPasskeys returns the credentials registered for an admin.
+type AdminPasskey struct {
+	ID         int64
+	Transports string
+	CreatedAt  string
+}
+
+func (s *Store) ListAdminPasskeys(ctx context.Context, adminID int64) ([]AdminPasskey, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT id, transports, created_at FROM admin_passkeys WHERE admin_id = ? ORDER BY id`, adminID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminPasskey
+	for rows.Next() {
+		var p AdminPasskey
+		if err := rows.Scan(&p.ID, &p.Transports, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// DeleteAdminPasskey removes a credential row for an admin (by passkey id).
+func (s *Store) DeleteAdminPasskey(ctx context.Context, adminID, passkeyID int64) error {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM admin_passkeys WHERE id = ? AND admin_id = ?`, passkeyID, adminID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errors.New("passkey not found for this admin")
+	}
+	return nil
 }
 
 // DeleteAdmin removes an admin and (cascade) their passkeys, sessions, login links.

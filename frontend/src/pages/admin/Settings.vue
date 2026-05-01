@@ -1,51 +1,61 @@
 <template>
   <AdminLayout>
-    <h2>设置</h2>
-    <div class="admin-card">
-      <h3>Telegram 机器人</h3>
-      <label>
-        <span>Bot Token <small v-if="settings.bot_token_set">（已设置: {{ settings.bot_token }}）</small></span>
-        <input v-model="form.bot_token" type="password" placeholder="从 @BotFather 获取的 Token" autocomplete="off" />
-      </label>
-      <label>
-        <span>Bot 用户名 (用于生成投稿引导链接)</span>
-        <input v-model="form.bot_username" placeholder="rip_lgbt_bot" />
-      </label>
-      <label>
-        <span>模式</span>
-        <select v-model="form.bot_mode">
-          <option value="polling">long polling</option>
-          <option value="webhook">webhook</option>
-        </select>
-      </label>
-      <label v-if="form.bot_mode === 'webhook'">
-        <span>Webhook URL</span>
-        <input v-model="form.bot_webhook_url" placeholder="https://example.com/api/bot/webhook" />
-      </label>
-      <label v-if="form.bot_mode === 'webhook'">
-        <span>
-          Webhook Secret Token
-          <small v-if="settings.bot_webhook_secret_set">（已设置: {{ settings.bot_webhook_secret }}）</small>
-        </span>
-        <input
-          v-model="form.bot_webhook_secret"
-          type="password"
-          autocomplete="off"
-          placeholder="A-Z a-z 0-9 _ - 1-256 字符；可选但强烈建议"
-        />
-      </label>
-
-      <h3 style="margin-top:1.4rem;">站点</h3>
-      <label>
-        <span>站点显示名</span>
-        <input v-model="form.site_name" placeholder="勿忘我" />
-      </label>
-
-      <div class="row" style="margin-top:1.2rem;">
-        <button class="button primary" type="button" @click="save" :disabled="busy">保存</button>
-        <span v-if="status" style="color:var(--muted);">{{ status }}</span>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">设置</h2>
+        <p class="page-subtitle">保存后会自动重载机器人，无需手动重启容器。</p>
       </div>
     </div>
+
+    <form class="card" @submit.prevent="save">
+      <h3>Telegram 机器人</h3>
+      <p class="card-subtitle">从 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> 创建并获取 token。</p>
+
+      <div class="field">
+        <span class="label">Bot Token <small v-if="settings.bot_token_set" class="field-hint">已设置: {{ settings.bot_token }}</small></span>
+        <input v-model="form.bot_token" type="password" autocomplete="off" placeholder="留空表示不修改" />
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <span class="label">Bot 用户名</span>
+          <input v-model="form.bot_username" placeholder="rip_lgbt_bot" />
+        </div>
+        <div class="field">
+          <span class="label">模式</span>
+          <select v-model="form.bot_mode">
+            <option value="polling">long polling（推荐）</option>
+            <option value="webhook">webhook</option>
+          </select>
+        </div>
+      </div>
+
+      <template v-if="form.bot_mode === 'webhook'">
+        <div class="field">
+          <span class="label">Webhook URL</span>
+          <input v-model="form.bot_webhook_url" placeholder="https://example.com/api/bot/webhook" />
+          <p class="field-hint">系统会自动追加 <code>/tg</code> 作为路径，如 <code>https://example.com/api/bot/webhook/tg</code>。</p>
+        </div>
+        <div class="field">
+          <span class="label">
+            Webhook Secret Token
+            <small v-if="settings.bot_webhook_secret_set" class="field-hint">已设置: {{ settings.bot_webhook_secret }}</small>
+          </span>
+          <input v-model="form.bot_webhook_secret" type="password" autocomplete="off" placeholder="A-Z a-z 0-9 _ - 1-256 字符" />
+        </div>
+      </template>
+
+      <h3 style="margin-top: 22px;">站点</h3>
+      <div class="field">
+        <span class="label">站点显示名</span>
+        <input v-model="form.site_name" placeholder="勿忘我" />
+      </div>
+
+      <div style="margin-top: 18px; display: flex; align-items: center; gap: 12px;">
+        <button class="button primary" type="submit" :disabled="busy">保存并重载机器人</button>
+        <span v-if="status" class="status-line" :class="statusTone">{{ status }}</span>
+      </div>
+    </form>
   </AdminLayout>
 </template>
 
@@ -56,6 +66,7 @@ import { adminAPI, type SettingsState } from '@/api/client';
 
 const settings = ref<SettingsState>({});
 const status = ref('');
+const statusTone = ref<'ok' | 'error' | ''>('');
 const busy = ref(false);
 
 const form = reactive<SettingsState>({
@@ -78,7 +89,7 @@ async function load() {
     form.bot_token = '';
     form.bot_webhook_secret = '';
   } catch (e: any) {
-    status.value = e?.response?.data?.error || '加载失败';
+    setStatus(e?.response?.data?.error || '加载失败', 'error');
   }
 }
 
@@ -94,14 +105,25 @@ async function save() {
     };
     if (form.bot_token) patch.bot_token = form.bot_token;
     if (form.bot_webhook_secret) patch.bot_webhook_secret = form.bot_webhook_secret;
-    await adminAPI.updateSettings(patch);
-    status.value = '已保存';
+    const r: any = await adminAPI.updateSettings(patch);
+    if (r.bot_reload_warn) {
+      setStatus('已保存。机器人重载警告：' + r.bot_reload_warn, 'error');
+    } else if (r.bot_reloaded) {
+      setStatus('已保存，机器人已自动重载', 'ok');
+    } else {
+      setStatus('已保存', 'ok');
+    }
     await load();
   } catch (e: any) {
-    status.value = e?.response?.data?.message || e?.response?.data?.error || '保存失败';
+    setStatus(e?.response?.data?.message || e?.response?.data?.error || '保存失败', 'error');
   } finally {
     busy.value = false;
   }
+}
+
+function setStatus(t: string, tone: 'ok' | 'error') {
+  status.value = t;
+  statusTone.value = tone;
 }
 
 onMounted(load);

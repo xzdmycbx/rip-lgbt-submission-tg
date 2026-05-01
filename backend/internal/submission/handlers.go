@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -95,18 +96,149 @@ func (s *AdminService) handlePreviewData(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not_found"})
 		return
 	}
+	// Build a profile object that matches the public memorial detail
+	// shape so the SPA preview page can re-use MemorialDetail.vue.
+	profile := buildPreviewProfile(d)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"draft": map[string]any{
-			"id":           d.ID,
-			"display_name": d.GetString("display_name"),
-			"description":  d.GetString("description"),
-		},
-		"profile": map[string]any{
-			"name":        d.GetString("display_name"),
-			"desc":        d.GetString("description"),
-			"contentHtml": markdownPreviewHTML(d),
-		},
+		"draft":   summarizeDraft(d),
+		"profile": profile,
 	})
+}
+
+// buildPreviewProfile mirrors memorial.Profile so the preview page can be
+// rendered with the same components as the public detail view.
+func buildPreviewProfile(d *Draft) map[string]any {
+	personPath := d.GetString("entry_id")
+	if personPath == "" {
+		personPath = d.ID
+	}
+
+	avatar := d.GetString("avatar")
+	for _, a := range d.Assets {
+		if a.Role == "avatar" {
+			avatar = "/media/" + a.Path
+			break
+		}
+	}
+
+	// Compose the same markdown body shape as a published memorial: a
+	// flat sequence of `## section` blocks. Skip empty sections so the
+	// preview matches what would actually render on the public page.
+	parts := []string{}
+	for _, p := range []struct{ title, key string }{
+		{"简介", "intro"},
+		{"生平与记忆", "life"},
+		{"离世", "death"},
+		{"念想", "remembrance"},
+	} {
+		v := d.GetString(p.key)
+		if v == "" {
+			continue
+		}
+		parts = append(parts, "## "+p.title+"\n\n"+v)
+	}
+	body := strings.Join(parts, "\n\n")
+	contentHTML := markdownPreviewHTML(d)
+	if contentHTML == "" {
+		contentHTML = renderMarkdownToHTML(body, personPath)
+	}
+
+	facts := []map[string]string{}
+	for _, p := range []struct{ label, key string }{
+		{"地区", "location"},
+		{"出生日期", "birth_date"},
+		{"逝世日期", "death_date"},
+		{"昵称", "alias"},
+		{"年龄", "age"},
+		{"身份表述", "identity"},
+		{"代词", "pronouns"},
+	} {
+		if v := d.GetString(p.key); v != "" {
+			facts = append(facts, map[string]string{"label": p.label, "value": v})
+		}
+	}
+
+	websites := parseLinks(d.GetString("links"))
+
+	return map[string]any{
+		"id":          personPath,
+		"path":        personPath,
+		"name":        d.GetString("display_name"),
+		"desc":        d.GetString("description"),
+		"departure":   d.GetString("death_date"),
+		"profileUrl":  avatar,
+		"facts":       facts,
+		"websites":    websites,
+		"contentHtml": contentHTML,
+	}
+}
+
+func summarizeDraft(d *Draft) map[string]any {
+	images := []map[string]any{}
+	for _, a := range d.Assets {
+		images = append(images, map[string]any{
+			"id":   a.ID,
+			"role": a.Role,
+			"url":  "/media/" + a.Path,
+			"size": a.Size,
+		})
+	}
+	return map[string]any{
+		"id":                    d.ID,
+		"status":                d.Status,
+		"submitter_telegram_id": d.SubmitterTelegramID,
+		"current_step":          d.CurrentStep,
+		"display_name":          d.GetString("display_name"),
+		"entry_id":              d.GetString("entry_id"),
+		"images":                images,
+		"created_at":            d.CreatedAt,
+		"updated_at":            d.UpdatedAt,
+	}
+}
+
+// renderMarkdownToHTML is set during App init to avoid a circular import.
+var renderMarkdownToHTML = func(md, personPath string) string { return "" }
+
+// SetMarkdownRenderer overrides the default no-op renderer with the
+// memorial markdown engine.
+func SetMarkdownRenderer(fn func(md, personPath string) string) {
+	if fn != nil {
+		renderMarkdownToHTML = fn
+	}
+}
+
+// parseLinks turns the textarea content from the bot ("twitter: https://...")
+// into a structured list. Supports either ":" or "  -  " separators.
+func parseLinks(raw string) []map[string]string {
+	out := []map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var label, url string
+		switch {
+		case strings.Contains(line, " - "):
+			parts := strings.SplitN(line, " - ", 2)
+			label, url = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		case strings.Contains(line, ":"):
+			parts := strings.SplitN(line, ":", 2)
+			label, url = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+			// Re-attach the protocol slashes that splitting consumed.
+			if strings.HasPrefix(url, "//") {
+				url = strings.ToLower(label) + ":" + url
+				label = strings.SplitN(line, ":", 2)[0]
+			}
+		default:
+			url = line
+			label = "链接"
+		}
+		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			continue
+		}
+		out = append(out, map[string]string{"label": label, "url": url})
+	}
+	return out
 }
 
 func (s *AdminService) handleAccept(w http.ResponseWriter, r *http.Request) {

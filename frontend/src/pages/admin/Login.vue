@@ -1,32 +1,37 @@
 <template>
-  <div class="admin-login">
-    <form @submit.prevent="submit">
-      <h1 style="font-family: var(--serif);">登录管理后台</h1>
-      <p style="color: var(--muted); margin: 0;">勿忘我 · rip.lgbt</p>
-      <label>
-        <span>用户名</span>
-        <input v-model="form.username" autocomplete="username" required />
-      </label>
-      <label>
-        <span>密码</span>
-        <input v-model="form.password" type="password" autocomplete="current-password" required />
-      </label>
-      <label v-if="needTOTP">
-        <span>动态验证码（6 位）</span>
-        <input v-model="form.totp" maxlength="6" inputmode="numeric" pattern="\d{6}" required />
-      </label>
-      <p v-if="error" style="color:#f5a9b8;margin:0;">{{ error }}</p>
-      <button class="button primary" type="submit" :disabled="busy">登录</button>
+  <div class="admin-app admin-login-page">
+    <div class="admin-login-card">
+      <div>
+        <h1>勿忘我 · 后台</h1>
+        <p class="lede">使用账号密码登录。如已绑定 Passkey，可直接走免密登录。</p>
+      </div>
 
-      <hr style="border: none; border-top: 1px solid var(--line); margin: 0.6rem 0;" />
+      <form @submit.prevent="submit">
+        <div class="field">
+          <span class="label">用户名</span>
+          <input v-model="form.username" autocomplete="username" required autofocus />
+        </div>
+
+        <div class="field">
+          <span class="label">密码</span>
+          <input v-model="form.password" type="password" autocomplete="current-password" required />
+        </div>
+
+        <p v-if="error" class="status-line error">{{ error }}</p>
+
+        <button class="button primary" type="submit" :disabled="busy">继续</button>
+      </form>
+
+      <div class="divider">或</div>
 
       <button class="button" type="button" @click="passwordlessLogin" :disabled="busy">
-        🔐 直接使用 Passkey 登录
+        🔐 使用 Passkey 直接登录
       </button>
-      <p style="font-size:.85rem;color:var(--muted);margin:0;">
-        TG 管理员请通过机器人申请一次性登录链接。
+
+      <p class="small-link">
+        TG 管理员可在机器人发送 <code>/login</code> 获取一次性登录链接。
       </p>
-    </form>
+    </div>
   </div>
 </template>
 
@@ -35,30 +40,29 @@ import { onMounted, reactive, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { authAPI } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
+import { base64urlToBuffer, bufferToBase64url, describePasskeyError } from '@/api/webauthn';
 import '@/styles/admin.css';
 
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
-const form = reactive({ username: '', password: '', totp: '' });
-const needTOTP = ref(false);
+const form = reactive({ username: '', password: '' });
 const error = ref('');
 const busy = ref(false);
 
+const next = (route.query.next as string | undefined) || '/admin/queue';
+
 onMounted(async () => {
-  // Token-based TG login
+  // TG token-based login.
   const token = route.query.token as string | undefined;
   if (token) {
     busy.value = true;
     try {
       const r = await authAPI.loginTG(token);
       if (r.ok) {
-        await auth.refresh();
-        if (r.need?.must_setup_2fa) {
-          router.replace('/admin/setup-2fa');
-        } else {
-          router.replace('/admin/queue');
-        }
+        await auth.refresh(true);
+        if (r.need?.must_setup_2fa) router.replace('/admin/setup-2fa');
+        else router.replace(next);
         return;
       }
       error.value = r.error || '登录链接无效或已过期';
@@ -75,22 +79,22 @@ async function submit() {
   error.value = '';
   try {
     const r = await authAPI.login(form);
-    if (r.need?.totp) {
-      needTOTP.value = true;
+    if (r.need?.totp && (r as any).pending_token) {
+      router.replace({
+        path: '/admin/login/totp',
+        query: { token: (r as any).pending_token, next }
+      });
       return;
     }
     if (r.ok) {
-      await auth.refresh();
-      if (r.need?.must_setup_2fa) {
-        router.replace('/admin/setup-2fa');
-      } else {
-        router.replace('/admin/queue');
-      }
-    } else {
-      error.value = r.error || '登录失败';
+      await auth.refresh(true);
+      if (r.need?.must_setup_2fa) router.replace('/admin/setup-2fa');
+      else router.replace(next);
+      return;
     }
+    error.value = readableError(r.error) || '登录失败';
   } catch (e: any) {
-    error.value = e?.response?.data?.error || '登录失败';
+    error.value = readableError(e?.response?.data?.error) || '登录失败';
   } finally {
     busy.value = false;
   }
@@ -128,30 +132,24 @@ async function passwordlessLogin() {
     };
     const r = await authAPI.passkeyDiscoverableFinish(begin.challenge_token, response);
     if (r.ok) {
-      await auth.refresh();
-      router.replace('/admin/queue');
+      await auth.refresh(true);
+      router.replace(next);
     } else {
       error.value = '登录失败';
     }
   } catch (e: any) {
-    error.value = e?.response?.data?.error || e?.message || 'Passkey 登录失败';
+    error.value = describePasskeyError(e);
   } finally {
     busy.value = false;
   }
 }
 
-function base64urlToBuffer(s: string): ArrayBuffer {
-  const pad = '='.repeat((4 - (s.length % 4)) % 4);
-  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(b64);
-  const buf = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
-  return buf.buffer;
-}
-function bufferToBase64url(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function readableError(code?: string): string {
+  switch (code) {
+    case 'invalid_credentials': return '用户名或密码不正确';
+    case 'missing_credentials': return '请填写用户名和密码';
+    case 'invalid_token': return '登录链接无效或已使用';
+    default: return code || '';
+  }
 }
 </script>

@@ -3,33 +3,61 @@ package auth
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // CookieMaxAge is the lifetime of a session cookie.
 const CookieMaxAge = 24 * time.Hour
 
-// IssueCookie writes the session id as an HTTP-only cookie.
-func IssueCookie(w http.ResponseWriter, name, value string, secure bool, maxAge time.Duration) {
+// IsSecureRequest returns true when the incoming request was served over
+// HTTPS — either directly (r.TLS != nil) or via a trusted reverse proxy
+// (X-Forwarded-Proto: https). The result determines whether to mark a
+// cookie as Secure so it survives across requests.
+func IsSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		// Some proxies use X-Forwarded-Ssl=on instead.
+		if strings.EqualFold(r.Header.Get("X-Forwarded-Ssl"), "on") {
+			return true
+		}
+		return false
+	}
+	// X-Forwarded-Proto can be a comma-separated list when there are
+	// multiple proxies; the first hop's scheme is what matters.
+	if i := strings.IndexByte(proto, ','); i >= 0 {
+		proto = proto[:i]
+	}
+	return strings.EqualFold(strings.TrimSpace(proto), "https")
+}
+
+// IssueCookie writes the session id as an HTTP-only cookie. Secure is
+// derived from the request, not from the static config, so the same
+// binary works correctly when accessed via plain http://localhost
+// during development and via https://example.com behind a proxy.
+func IssueCookie(w http.ResponseWriter, r *http.Request, name, value string, maxAge time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   IsSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(maxAge.Seconds()),
 	})
 }
 
 // ClearCookie removes the session cookie.
-func ClearCookie(w http.ResponseWriter, name string, secure bool) {
+func ClearCookie(w http.ResponseWriter, r *http.Request, name string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   IsSecureRequest(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

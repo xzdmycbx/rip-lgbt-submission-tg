@@ -1,51 +1,88 @@
 <template>
   <AdminLayout>
-    <h2>审稿 #{{ draftId }}</h2>
-    <div class="admin-card" v-if="!draft">加载中…</div>
-    <div v-else>
-      <div class="review-grid">
-        <iframe :src="`/admin/preview/${draftId}`" title="预览"></iframe>
-        <div>
-          <div class="admin-card">
-            <h3>操作</h3>
-            <div class="row">
-              <button class="button primary" @click="accept" :disabled="busy">接受 · 上线</button>
-              <button class="button" @click="rejectDialog = true" :disabled="busy">拒绝</button>
-            </div>
-            <div style="margin-top:1rem;">
-              <h4 style="font-size:.95rem; margin: .4rem 0;">要求修改某一节</h4>
-              <select v-model="revisionSection">
-                <option value="">选择节</option>
-                <option v-for="s in sections" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </select>
-              <textarea v-model="revisionNote" rows="2" placeholder="给投稿人的话（可选）" style="margin-top:.4rem;"></textarea>
-              <button class="button" type="button" @click="requestRevision" :disabled="busy || !revisionSection">退回修改</button>
-            </div>
-          </div>
-
-          <div class="admin-card">
-            <h3>原始 Markdown</h3>
-            <pre>{{ draft.markdown_full || '(草稿尚未生成 markdown)' }}</pre>
-          </div>
-
-          <div class="admin-card">
-            <h3>已收集字段</h3>
-            <pre>{{ JSON.stringify(draft.payload, null, 2) }}</pre>
-          </div>
-        </div>
+    <div class="page-head">
+      <div>
+        <h2 class="page-title">审稿 #{{ draft?.entry_id || draftId.slice(0, 8) }}</h2>
+        <p class="page-subtitle" v-if="draft">
+          提交人 TG <code>{{ draft.submitter_telegram_id }}</code> · 状态
+          <span class="badge" :class="statusBadge(draft.status)">{{ draft.status }}</span>
+        </p>
       </div>
-
-      <div v-if="rejectDialog" class="admin-card">
-        <h3>填写拒绝原因</h3>
-        <textarea v-model="rejectReason" rows="3" placeholder="将告知投稿人"></textarea>
-        <div class="row" style="margin-top:.6rem;">
-          <button class="button" @click="rejectDialog = false">取消</button>
-          <button class="button primary" @click="reject" :disabled="busy || !rejectReason">确认拒绝</button>
-        </div>
+      <div class="actions">
+        <RouterLink class="button ghost" to="/admin/queue">← 返回队列</RouterLink>
       </div>
-
-      <p v-if="status" style="color:var(--muted); margin-top:1rem;">{{ status }}</p>
     </div>
+
+    <div v-if="!draft" class="card empty-state">加载中…</div>
+    <div v-else class="review-grid">
+      <div class="preview-frame">
+        <iframe :src="`/admin/preview/${draftId}`" title="预览"></iframe>
+      </div>
+
+      <div class="review-side">
+        <div class="card tight">
+          <h3>操作</h3>
+          <p class="card-subtitle">这位投稿者也会同步收到机器人的通知。</p>
+          <div class="action-stack">
+            <button class="button primary" type="button" @click="accept" :disabled="busy">
+              ✅ 接受 · 立即上线
+            </button>
+            <button class="button" type="button" @click="rejectDialog = !rejectDialog" :disabled="busy">
+              ✗ 拒绝投稿
+            </button>
+          </div>
+
+          <div v-if="rejectDialog" style="margin-top: 12px;">
+            <label class="field">
+              <span class="label">拒绝原因（会发给投稿者）</span>
+              <textarea v-model="rejectReason" rows="3" placeholder="请说明原因"></textarea>
+            </label>
+            <div style="display:flex; gap:8px;">
+              <button class="button" type="button" @click="rejectDialog=false">取消</button>
+              <button class="button danger" type="button" @click="reject" :disabled="busy || !rejectReason.trim()">确认拒绝</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card tight">
+          <h3>退回某一节修改</h3>
+          <p class="card-subtitle">机器人会让投稿者重新填写选定的字段。</p>
+          <label class="field">
+            <span class="label">需要修改的章节</span>
+            <select v-model="revisionSection">
+              <option value="">— 选择 —</option>
+              <option v-for="s in sections" :key="s.value" :value="s.value">{{ s.label }}</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="label">备注（可选）</span>
+            <textarea v-model="revisionNote" rows="2" placeholder="例如：希望在简介中补充 ta 的爱好"></textarea>
+          </label>
+          <button class="button" type="button" @click="requestRevision" :disabled="busy || !revisionSection">退回修改</button>
+        </div>
+
+        <div class="card tight">
+          <h3>已收集字段</h3>
+          <pre class="markdown-dump">{{ JSON.stringify(draft.payload, null, 2) }}</pre>
+        </div>
+
+        <div class="card tight" v-if="draft.assets?.length">
+          <h3>已上传图片</h3>
+          <div class="image-grid">
+            <a v-for="a in draft.assets" :key="a.id" :href="`/media/${a.path}`" target="_blank" rel="noopener">
+              <img :src="`/media/${a.path}`" :alt="a.role" />
+            </a>
+          </div>
+        </div>
+
+        <div class="card tight">
+          <h3>原始 Markdown</h3>
+          <pre class="markdown-dump">{{ draft.markdown_full || '(暂无)' }}</pre>
+        </div>
+      </div>
+    </div>
+
+    <p v-if="status" class="status-line" :class="statusTone">{{ status }}</p>
   </AdminLayout>
 </template>
 
@@ -60,6 +97,7 @@ const router = useRouter();
 
 const draft = ref<any | null>(null);
 const status = ref('');
+const statusTone = ref<'ok' | 'error' | ''>('');
 const busy = ref(false);
 const rejectDialog = ref(false);
 const rejectReason = ref('');
@@ -89,7 +127,7 @@ async function load() {
     const r = await adminAPI.getDraft(props.draftId);
     draft.value = r.draft;
   } catch (e: any) {
-    status.value = e?.response?.data?.error || '加载失败';
+    setStatus(e?.response?.data?.error || '加载失败', 'error');
   }
 }
 
@@ -97,24 +135,24 @@ async function accept() {
   busy.value = true;
   try {
     await adminAPI.acceptDraft(props.draftId);
-    status.value = '已接受';
-    setTimeout(() => router.replace('/admin/queue'), 800);
+    setStatus('已接受 · 跳转中', 'ok');
+    setTimeout(() => router.replace('/admin/queue'), 600);
   } catch (e: any) {
-    status.value = e?.response?.data?.error || '操作失败';
+    setStatus(e?.response?.data?.error || '操作失败', 'error');
   } finally {
     busy.value = false;
   }
 }
 
 async function reject() {
-  if (!rejectReason.value) return;
+  if (!rejectReason.value.trim()) return;
   busy.value = true;
   try {
     await adminAPI.rejectDraft(props.draftId, rejectReason.value);
-    status.value = '已拒绝';
-    setTimeout(() => router.replace('/admin/queue'), 800);
+    setStatus('已拒绝', 'ok');
+    setTimeout(() => router.replace('/admin/queue'), 600);
   } catch (e: any) {
-    status.value = e?.response?.data?.error || '操作失败';
+    setStatus(e?.response?.data?.error || '操作失败', 'error');
   } finally {
     busy.value = false;
   }
@@ -125,13 +163,28 @@ async function requestRevision() {
   busy.value = true;
   try {
     await adminAPI.requestRevision(props.draftId, revisionSection.value, revisionNote.value);
-    status.value = '已退回，机器人会请投稿人补改。';
-    setTimeout(() => router.replace('/admin/queue'), 800);
+    setStatus('已通知投稿者修改', 'ok');
+    setTimeout(() => router.replace('/admin/queue'), 600);
   } catch (e: any) {
-    status.value = e?.response?.data?.error || '操作失败';
+    setStatus(e?.response?.data?.error || '操作失败', 'error');
   } finally {
     busy.value = false;
   }
+}
+
+function statusBadge(s: string): string {
+  switch (s) {
+    case 'review': return 'info';
+    case 'accepted': return 'ok';
+    case 'rejected': return 'danger';
+    case 'revising': return 'warn';
+    default: return 'muted';
+  }
+}
+
+function setStatus(text: string, tone: 'ok' | 'error') {
+  status.value = text;
+  statusTone.value = tone;
 }
 
 onMounted(load);

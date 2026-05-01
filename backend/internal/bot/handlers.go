@@ -164,6 +164,21 @@ func (m *Manager) handleText(b *gotgbot.Bot, ctx *ext.Context) error {
 
 	switch step.Kind {
 	case submission.StepText, submission.StepShortText:
+		// Validate entry_id immediately so the user is not surprised at
+		// submission time. Other free-form fields are unrestricted.
+		if step.Key == "entry_id" {
+			status, err := submission.CheckEntryID(c, m.drafts.DB, msg.Text, d.ID)
+			if err != nil {
+				m.logger.Warn("check entry id", "err", err)
+			}
+			if status != submission.EntryIDOK {
+				// Stay on the same step, surface the message via a
+				// transient toast-style note in the prompt.
+				note := submission.EntryIDStatusMessage(status)
+				_ = m.sendStepWithNote(b, c, d, step, note)
+				return nil
+			}
+		}
 		d.SetStringField(step.Key, msg.Text)
 	case submission.StepImage:
 		// Allow user to type "none" to skip avatars
@@ -367,14 +382,26 @@ func (m *Manager) handleSubmitFinal(b *gotgbot.Bot, ctx *ext.Context) error {
 
 // --- prompts and keyboards ---
 
+// sendStepMessage renders the prompt for `step` and either edits the
+// existing main message or sends a fresh one when no main message exists
+// yet (or after `fresh` is true to force a new send).
 func (m *Manager) sendStepMessage(b *gotgbot.Bot, ctx context.Context, d *submission.Draft, step submission.Step, fresh bool) error {
+	return m.sendStepWithNote(b, ctx, d, step, "")
+}
+
+// sendStepWithNote is the same as sendStepMessage but injects a one-shot
+// note (typically a validation message) above the regular prompt.
+func (m *Manager) sendStepWithNote(b *gotgbot.Bot, ctx context.Context, d *submission.Draft, step submission.Step, note string) error {
 	text := renderStepText(d, step)
+	if note != "" {
+		text = "⚠️ " + htmlEscape(note) + "\n\n" + text
+	}
 	kb := buildStepKeyboard(d, step)
 	chatID, msgID, err := m.drafts.LatestMainMessage(ctx, d.ID)
 	if err != nil {
 		return err
 	}
-	if !fresh && chatID != 0 && msgID != 0 {
+	if chatID != 0 && msgID != 0 {
 		_, _, errEdit := b.EditMessageText(text, &gotgbot.EditMessageTextOpts{
 			ChatId:      chatID,
 			MessageId:   msgID,
@@ -384,7 +411,6 @@ func (m *Manager) sendStepMessage(b *gotgbot.Bot, ctx context.Context, d *submis
 		if errEdit == nil {
 			return nil
 		}
-		// Fall through to fresh send if the message was deleted.
 	}
 	sent, err := b.SendMessage(d.SubmitterChatID, text, &gotgbot.SendMessageOpts{
 		ReplyMarkup: kb,
@@ -402,6 +428,8 @@ func renderStepText(d *submission.Draft, step submission.Step) string {
 	fmt.Fprintf(&b, "<b>%s</b>  <i>(%s)</i>\n\n", htmlEscape(step.Title), progress)
 	if step.Kind == submission.StepFinal {
 		b.WriteString(htmlEscape(step.Prompt))
+		b.WriteString("\n\n")
+		b.WriteString(renderDraftSummary(d))
 	} else {
 		b.WriteString(htmlEscape(step.Prompt))
 		if step.Example != "" {
@@ -412,6 +440,50 @@ func renderStepText(d *submission.Draft, step submission.Step) string {
 			fmt.Fprintf(&b, "\n\n<u>当前已填</u>\n<i>%s</i>", htmlEscape(truncate(v, 320)))
 		}
 	}
+	return b.String()
+}
+
+// renderDraftSummary lays out everything the user has filled so far in a
+// compact preview the user can scan before pressing 提交审核.
+func renderDraftSummary(d *submission.Draft) string {
+	var b strings.Builder
+	b.WriteString("<b>📋 当前内容预览</b>\n")
+	for _, step := range submission.Steps() {
+		if step.Kind == submission.StepFinal {
+			continue
+		}
+		v := d.GetString(step.Key)
+		if step.Kind == submission.StepImage || step.Kind == submission.StepImages {
+			n := 0
+			for _, a := range d.Assets {
+				if a.Role == step.AssetRole {
+					n++
+				}
+			}
+			if n > 0 {
+				fmt.Fprintf(&b, "✓ %s · %d 张图\n", htmlEscape(step.Title), n)
+				continue
+			}
+			if v == "none" {
+				fmt.Fprintf(&b, "○ %s · 标记为无\n", htmlEscape(step.Title))
+				continue
+			}
+			if step.Required {
+				fmt.Fprintf(&b, "✗ %s · <i>未上传</i>\n", htmlEscape(step.Title))
+			} else {
+				fmt.Fprintf(&b, "○ %s · 跳过\n", htmlEscape(step.Title))
+			}
+			continue
+		}
+		if v == "" {
+			if step.Required {
+				fmt.Fprintf(&b, "✗ %s · <i>未填写</i>\n", htmlEscape(step.Title))
+			}
+			continue
+		}
+		fmt.Fprintf(&b, "✓ %s · %s\n", htmlEscape(step.Title), htmlEscape(truncate(v, 60)))
+	}
+	b.WriteString("\n点击下方按钮可跳到任意一节修改，确认无误后再提交。")
 	return b.String()
 }
 
@@ -428,7 +500,13 @@ func stepProgress(key string) string {
 func buildStepKeyboard(d *submission.Draft, step submission.Step) gotgbot.InlineKeyboardMarkup {
 	rows := [][]gotgbot.InlineKeyboardButton{}
 	if step.Kind == submission.StepFinal {
+		// At the review step the user can still freely jump to any
+		// section, then come back here to submit.
 		rows = append(rows, []gotgbot.InlineKeyboardButton{
+			{Text: "📋 跳到任意步骤修改", CallbackData: "nav:menu"},
+		})
+		rows = append(rows, []gotgbot.InlineKeyboardButton{
+			{Text: "◀ 上一步", CallbackData: "nav:prev"},
 			{Text: "✅ 提交审核", CallbackData: "submit"},
 		})
 	} else {

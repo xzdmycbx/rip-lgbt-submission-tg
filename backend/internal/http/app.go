@@ -29,20 +29,21 @@ var staticFS embed.FS
 
 // App wires routes, dependencies, and lifecycle.
 type App struct {
-	cfg          *config.Config
-	logger       *slog.Logger
-	router       chi.Router
-	db           *appdb.DB
-	authStore    *auth.Store
-	authService  *auth.Service
-	memorialSvc  *memorial.Service
-	adminSvc     *admin.Service
-	settingStore *settings.Store
-	drafts       *submission.Store
-	draftAdmin   *submission.AdminService
-	botManager   *bot.Manager
-	preview      *preview.Service
-	stopJanitor  func()
+	cfg            *config.Config
+	logger         *slog.Logger
+	router         chi.Router
+	db             *appdb.DB
+	authStore      *auth.Store
+	authService    *auth.Service
+	memorialSvc    *memorial.Service
+	memorialAdmin  *memorial.AdminService
+	adminSvc       *admin.Service
+	settingStore   *settings.Store
+	drafts         *submission.Store
+	draftAdmin     *submission.AdminService
+	botManager     *bot.Manager
+	preview        *preview.Service
+	stopJanitor    func()
 }
 
 // NewApp opens the database, runs migrations, seeds the superadmin, and wires
@@ -66,12 +67,10 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 		logger.Warn("passkey manager init failed; passkey routes will error", "err", err)
 	}
 
-	cookieSecure := strings.HasPrefix(cfg.SiteURL, "https://")
 	svc := auth.NewService(store, passkeys, auth.ServiceConfig{
-		CookieName:   cfg.Secrets.SessionCookieName,
-		CookieSecure: cookieSecure,
-		SiteURL:      cfg.SiteURL,
-		SiteIssuer:   "rip.lgbt",
+		CookieName: cfg.Secrets.SessionCookieName,
+		SiteURL:    cfg.SiteURL,
+		SiteIssuer: "rip.lgbt",
 	})
 
 	settingsStore := settings.NewStore(db)
@@ -109,23 +108,33 @@ func NewApp(cfg *config.Config, logger *slog.Logger) (*App, error) {
 			"## 离世", d.GetString("death"),
 			"## 念想", d.GetString("remembrance"),
 		}, "\n\n"))
-		return markdown.Render(body, d.GetString("entry_id"))
+		personPath := d.GetString("entry_id")
+		if personPath == "" {
+			personPath = d.ID
+		}
+		return markdown.Render(body, personPath)
+	})
+	submission.SetMarkdownRenderer(func(md, personPath string) string {
+		return markdown.Render(md, personPath)
 	})
 
 	a := &App{
-		cfg:          cfg,
-		logger:       logger,
-		db:           db,
-		authStore:    store,
-		authService:  svc,
-		memorialSvc:  memorial.NewService(db, cfg.Secrets.IPHashPepper),
-		settingStore: settingsStore,
-		adminSvc:     admin.NewService(store, svc, settingsStore),
-		drafts:       drafts,
-		draftAdmin:   submission.NewAdminService(drafts, botMgr),
-		botManager:   botMgr,
-		preview:      previewSvc,
+		cfg:           cfg,
+		logger:        logger,
+		db:            db,
+		authStore:     store,
+		authService:   svc,
+		memorialSvc:   memorial.NewService(db, cfg.Secrets.IPHashPepper),
+		memorialAdmin: memorial.NewAdminService(db),
+		settingStore:  settingsStore,
+		adminSvc:      admin.NewService(store, svc, settingsStore),
+		drafts:        drafts,
+		draftAdmin:    submission.NewAdminService(drafts, botMgr),
+		botManager:    botMgr,
+		preview:       previewSvc,
 	}
+	// Wire bot auto-reload after settings change.
+	a.adminSvc.BotReload = botMgr.Reload
 	a.stopJanitor = startJanitor(logger, store, drafts)
 	a.router = a.buildRouter()
 	return a, nil
@@ -180,6 +189,7 @@ func (a *App) buildRouter() chi.Router {
 		r.Route("/admin", func(r chi.Router) {
 			a.adminSvc.Register(r)
 			a.draftAdmin.Register(r)
+			a.memorialAdmin.Register(r)
 			r.With(auth.RequireLogin, auth.RequireSuperadmin).
 				Post("/settings/reload-bot", func(w http.ResponseWriter, req *http.Request) {
 					if err := a.botManager.Reload(req.Context()); err != nil {

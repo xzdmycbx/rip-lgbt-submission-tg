@@ -3,6 +3,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -20,6 +21,11 @@ type Service struct {
 	Auth     *auth.Service
 	Settings *settings.Store
 	Store    *auth.Store
+
+	// BotReload is invoked after a successful settings change. The admin
+	// HTTP layer calls it so users do not have to manually toggle the
+	// bot. Errors are surfaced to the client as warnings.
+	BotReload func(ctx context.Context) error
 }
 
 func NewService(authStore *auth.Store, authSvc *auth.Service, settings *settings.Store) *Service {
@@ -207,7 +213,18 @@ func (s *Service) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+
+	// Auto-reload the TG bot so token / mode / webhook changes take
+	// effect without a separate user action.
+	resp := map[string]any{"ok": true}
+	if s.BotReload != nil {
+		if err := s.BotReload(r.Context()); err != nil {
+			resp["bot_reload_warn"] = err.Error()
+		} else {
+			resp["bot_reloaded"] = true
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // validSecretToken matches Telegram's allowed character set (A-Z, a-z, 0-9, _, -)
