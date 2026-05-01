@@ -181,11 +181,12 @@ func (m *Manager) handleText(b *gotgbot.Bot, ctx *ext.Context) error {
 		}
 		d.SetStringField(step.Key, msg.Text)
 	case submission.StepImage:
-		// Allow user to type "none" to skip avatars
+		// Only "none" is accepted as text input for image steps (hidden fallback
+		// for genuinely missing avatars). All actual images must come from the
+		// web uploader; we redirect photo messages there in handlePhoto.
 		if strings.EqualFold(strings.TrimSpace(msg.Text), "none") {
 			d.SetStringField(step.Key, "none")
 		} else {
-			// ignore: user must send a picture
 			_ = m.sendStepMessage(b, c, d, step, false)
 			return nil
 		}
@@ -532,6 +533,13 @@ func (m *Manager) sendStepMenu(b *gotgbot.Bot, ctx context.Context, d *submissio
 		}
 		if v := d.GetString(s.Key); v != "" {
 			marker = "✓"
+		} else if s.Kind == submission.StepImage || s.Kind == submission.StepImages {
+			for _, a := range d.Assets {
+				if a.Role == s.AssetRole {
+					marker = "✓"
+					break
+				}
+			}
 		}
 		rows = append(rows, []gotgbot.InlineKeyboardButton{{
 			Text:         fmt.Sprintf("%s %s", marker, s.Title),
