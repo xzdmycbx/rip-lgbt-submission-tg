@@ -67,6 +67,7 @@ func NewStore(db *appdb.DB, uploadDir string) *Store {
 }
 
 // FindOpenByTelegram returns the latest collecting/revising draft for a user, if any.
+// Assets are loaded so callers can inspect web-uploaded files without a second query.
 func (s *Store) FindOpenByTelegram(ctx context.Context, tgID int64) (*Draft, error) {
 	row := s.DB.QueryRowContext(ctx, `
 		SELECT id, submitter_telegram_id, submitter_chat_id, status, current_step, payload_json,
@@ -74,7 +75,15 @@ func (s *Store) FindOpenByTelegram(ctx context.Context, tgID int64) (*Draft, err
 		FROM drafts
 		WHERE submitter_telegram_id = ? AND status IN (?, ?) AND deleted_at IS NULL
 		ORDER BY updated_at DESC LIMIT 1`, tgID, StatusCollecting, StatusRevising)
-	return scanDraft(row)
+	d, err := scanDraft(row)
+	if err != nil {
+		return nil, err
+	}
+	d.Assets, err = s.assetsForDraft(ctx, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // Get fetches a draft by id (including soft-deleted).

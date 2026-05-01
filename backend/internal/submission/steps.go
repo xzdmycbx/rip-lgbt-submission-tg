@@ -34,7 +34,7 @@ func Steps() []Step {
 			Example: "例：Akiball、玖月折耳猫、无名逝者",
 		},
 		{Key: "avatar", Title: "头像", Required: true, Kind: StepImage, AssetRole: "avatar",
-			Prompt: "请点击下方「📸 在网页上传图片」按钮上传头像。\n如果暂时没有头像，可以发送文字 “none”。",
+			Prompt: "请点击下方「📸 在网页上传图片」按钮上传头像。\n上传完成后点击「下一步」继续。",
 		},
 		{Key: "description", Title: "一句话简介", Required: true, Kind: StepShortText,
 			Prompt:  "请输入一句话简介。\n会出现在列表卡片和详情页顶部，建议 20-60 字。",
